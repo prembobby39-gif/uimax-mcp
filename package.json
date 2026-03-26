@@ -1,6 +1,6 @@
 {
   "name": "uimax-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "UIMax MCP — Turns Claude Code into a frontend expert that reviews and fixes your UI automatically. Free for Pro plan users.",
   "type": "module",
   "main": "dist/index.js",

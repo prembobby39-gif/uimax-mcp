@@ -24,7 +24,7 @@ import {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
-    version: "0.2.0",
+    version: "0.3.0",
     // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
