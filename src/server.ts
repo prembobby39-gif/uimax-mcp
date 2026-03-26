@@ -6,6 +6,7 @@ import { runAccessibilityAudit, formatAccessibilityReport } from "./tools/access
 import { measurePerformance, formatPerformanceReport } from "./tools/performance.js";
 import { analyzeCode, formatCodeAnalysisReport } from "./tools/code-analysis.js";
 import { runFullReview, formatFullReviewReport } from "./tools/full-review.js";
+import { checkDarkMode } from "./tools/dark-mode.js";
 import { closeBrowser } from "./utils/browser.js";
 import {
   UI_REVIEW_PROMPT,
@@ -19,6 +20,7 @@ export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
     version: "0.2.0",
+    // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
   // ── Primary Tools (automated pipeline) ────────────────────────
@@ -266,6 +268,58 @@ This tool is FREE — runs entirely within Claude Code.`,
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Responsive screenshots failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "check_dark_mode",
+    "Detect whether a webpage supports dark mode. Captures two screenshots — one in light mode and one with prefers-color-scheme: dark emulated — then compares them. Returns both screenshots and a difference percentage. Great for checking if dark mode is properly implemented.",
+    {
+      url: z.string().url().describe("URL of the page to check"),
+    },
+    async ({ url }) => {
+      try {
+        const result = await checkDarkMode(url);
+
+        const status = result.hasDarkMode
+          ? `Dark mode DETECTED (${result.differencePercent}% difference between light and dark)`
+          : "No dark mode detected — the page looks identical in light and dark mode";
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `# Dark Mode Check\n\n**URL:** ${url}\n**Result:** ${status}\n\n## Light Mode:`,
+            },
+            {
+              type: "image" as const,
+              data: result.lightScreenshot.base64,
+              mimeType: result.lightScreenshot.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: `\n## Dark Mode (emulated):`,
+            },
+            {
+              type: "image" as const,
+              data: result.darkScreenshot.base64,
+              mimeType: result.darkScreenshot.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: result.hasDarkMode
+                ? `\n\nDark mode is implemented. Review both screenshots for contrast issues, missing dark variants, or elements that don't adapt properly.`
+                : `\n\nNo dark mode support detected. Consider adding \`prefers-color-scheme: dark\` media queries or CSS custom properties for theming. This is increasingly expected by users — ~80% of mobile users prefer dark mode.`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Dark mode check failed: ${message}` }],
           isError: true,
         };
       }

@@ -1,7 +1,7 @@
 {
   "name": "uimax-mcp",
-  "version": "0.1.0",
-  "description": "AI-powered UI review MCP server for Claude Code. Captures screenshots, runs accessibility audits, analyzes frontend code, and provides expert review methodology — all in one tool.",
+  "version": "0.2.0",
+  "description": "UIMax MCP — Turns Claude Code into a frontend expert that reviews and fixes your UI automatically. Free for Pro plan users.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -27,7 +27,10 @@
     "web-audit",
     "axe-core",
     "puppeteer",
-    "claude-code"
+    "claude-code",
+    "dark-mode",
+    "uimax",
+    "ui-expert"
   ],
   "license": "MIT",
   "engines": {

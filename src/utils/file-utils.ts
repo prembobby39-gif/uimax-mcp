@@ -13,9 +13,11 @@ export type Framework =
   | "html"
   | "unknown";
 
-export async function detectFramework(directory: string): Promise<Framework> {
+async function detectFrameworkFromPkgJson(
+  dir: string
+): Promise<Framework | null> {
   try {
-    const pkgPath = resolve(directory, "package.json");
+    const pkgPath = resolve(dir, "package.json");
     const content = await readFile(pkgPath, "utf-8");
     const pkg = JSON.parse(content);
     const allDeps = {
@@ -30,6 +32,21 @@ export async function detectFramework(directory: string): Promise<Framework> {
     if (allDeps["@angular/core"]) return "angular";
   } catch {
     // No package.json or parsing failed
+  }
+  return null;
+}
+
+export async function detectFramework(directory: string): Promise<Framework> {
+  // Search for package.json in the given directory, then one and two levels up
+  const searchDirs = [
+    directory,
+    resolve(directory, ".."),
+    resolve(directory, "..", ".."),
+  ];
+
+  for (const dir of searchDirs) {
+    const framework = await detectFrameworkFromPkgJson(dir);
+    if (framework) return framework;
   }
 
   // Check for HTML files

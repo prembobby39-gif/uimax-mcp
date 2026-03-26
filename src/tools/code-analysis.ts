@@ -171,6 +171,95 @@ const RULES: readonly Rule[] = [
     pattern: /(?:await\s+fetch|useQuery|useSWR|axios\.)(?![^]*(?:loading|isLoading|pending|skeleton|spinner))/g,
     fileTypes: [".tsx", ".jsx"],
   },
+
+  // ── React Hooks & Patterns ──
+  {
+    id: "react-hooks-conditional",
+    severity: "high",
+    category: "code-quality",
+    message: "React hook called inside a conditional block",
+    suggestion: "Move hooks to the top level of the component — hooks must be called in the same order every render",
+    pattern: /if\s*\(.*use[A-Z]/g,
+    fileTypes: [".tsx", ".jsx"],
+  },
+  {
+    id: "missing-key-prop",
+    severity: "high",
+    category: "bug",
+    message: "Array .map() rendering JSX without a key prop",
+    suggestion: "Add a unique key prop to the root element returned from .map() (e.g., key={item.id})",
+    pattern: /\.map\s*\([^)]*\)\s*(?:=>|{)\s*(?:\(?\s*<)(?![^>]*\bkey\s*=)/g,
+    fileTypes: [".tsx", ".jsx"],
+  },
+  {
+    id: "direct-dom-access",
+    severity: "medium",
+    category: "code-quality",
+    message: "Direct DOM access detected in a component file",
+    suggestion: "Use refs (useRef/ref) instead of document.querySelector/getElementById in React/Vue components",
+    pattern: /document\.(?:querySelector|getElementById)\s*\(/g,
+    fileTypes: [".tsx", ".jsx", ".vue"],
+  },
+  {
+    id: "empty-catch",
+    severity: "high",
+    category: "code-quality",
+    message: "Empty catch block swallows errors silently",
+    suggestion: "Handle or log the error inside the catch block — silent failures make debugging extremely difficult",
+    pattern: /catch\s*\([^)]*\)\s*\{\s*\}/g,
+    fileTypes: [".ts", ".tsx", ".js", ".jsx"],
+  },
+  {
+    id: "event-handler-inline",
+    severity: "low",
+    category: "code-quality",
+    message: "Inline arrow function in event handler causes unnecessary re-renders",
+    suggestion: "Extract the handler into a useCallback hook or a named function defined outside JSX",
+    pattern: /onClick\s*=\s*\{\s*\(\)\s*=>/g,
+    fileTypes: [".tsx", ".jsx"],
+  },
+
+  // ── Design Rules (additional) ──
+  {
+    id: "font-too-small",
+    severity: "medium",
+    category: "design",
+    message: "Font size below 12px may be unreadable for many users",
+    suggestion: "Use a minimum font size of 12px (or 0.75rem) for body text to ensure readability",
+    pattern: /font-size:\s*(?:[0-9]|1[01])px/g,
+    fileTypes: [".css", ".scss"],
+  },
+
+  // ── UX Rules (additional) ──
+  {
+    id: "missing-meta-description",
+    severity: "medium",
+    category: "ux",
+    message: "HTML file missing <meta name=\"description\"> tag",
+    suggestion: "Add a <meta name=\"description\" content=\"...\"> for better SEO and link previews",
+    pattern: /(?=[\s\S]*<head)(?![\s\S]*<meta\s+name\s*=\s*["']description["'])/g,
+    fileTypes: [".html"],
+  },
+
+  // ── Accessibility Rules (additional) ──
+  {
+    id: "missing-viewport-meta",
+    severity: "high",
+    category: "accessibility",
+    message: "HTML file missing <meta name=\"viewport\"> tag",
+    suggestion: "Add <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> for responsive design",
+    pattern: /(?=[\s\S]*<head)(?![\s\S]*<meta\s+name\s*=\s*["']viewport["'])/g,
+    fileTypes: [".html"],
+  },
+  {
+    id: "no-focus-visible",
+    severity: "medium",
+    category: "accessibility",
+    message: "CSS uses :focus without :focus-visible — keyboard-only focus styling missing",
+    suggestion: "Replace or supplement :focus with :focus-visible to avoid showing focus rings on mouse clicks",
+    pattern: /:focus\b(?!-visible)/g,
+    fileTypes: [".css", ".scss"],
+  },
 ];
 
 // ── File-Level Checks ──────────────────────────────────────────────
@@ -219,6 +308,31 @@ function checkDeepNesting(file: FileInfo): CodeFinding | null {
       message: `Deep nesting detected (${maxIndent} levels)`,
       suggestion:
         "Extract nested logic into helper functions or use early returns",
+    };
+  }
+  return null;
+}
+
+function checkMissingErrorBoundary(files: readonly FileInfo[]): CodeFinding | null {
+  const hasErrorBoundary = files.some((file) => {
+    const name = file.relativePath.toLowerCase();
+    return name.includes("errorboundary") || name.includes("error-boundary");
+  });
+
+  const hasComponents = files.some((file) =>
+    [".tsx", ".jsx"].includes(file.extension)
+  );
+
+  if (hasComponents && !hasErrorBoundary) {
+    return {
+      file: "(project-level)",
+      line: null,
+      severity: "medium",
+      category: "ux",
+      rule: "no-error-boundary",
+      message: "No ErrorBoundary component found in the project",
+      suggestion:
+        "Create an ErrorBoundary component to gracefully catch and display runtime errors instead of crashing the UI",
     };
   }
   return null;
@@ -288,6 +402,10 @@ export async function analyzeCode(
     const nestingCheck = checkDeepNesting(file);
     if (nestingCheck) findings.push(nestingCheck);
   }
+
+  // Run project-level checks
+  const errorBoundaryCheck = checkMissingErrorBoundary(files);
+  if (errorBoundaryCheck) findings.push(errorBoundaryCheck);
 
   // Sort findings by severity
   const severityOrder: Record<Severity, number> = {

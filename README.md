@@ -70,7 +70,7 @@ npm install -g uimax-mcp
 
 ## Tools
 
-The MCP server exposes 8 tools that Claude uses automatically:
+The MCP server exposes 9 tools that Claude uses automatically:
 
 ### `review_ui` ⭐ THE Primary Tool — Full Automated Pipeline
 This is the magic. One tool that does **everything**:
@@ -103,6 +103,9 @@ Output: PNG image + metadata
 ### `responsive_screenshots`
 Captures screenshots at **mobile (375px)**, **tablet (768px)**, and **desktop (1440px)** viewports. Perfect for reviewing responsive design.
 
+### `check_dark_mode` 🌙
+Detects whether your app supports dark mode. Captures two screenshots — light mode and dark mode (emulated via `prefers-color-scheme: dark`) — and compares them. Returns both screenshots + a difference percentage. If 0% difference, dark mode isn't implemented.
+
 ### `accessibility_audit`
 Injects [axe-core](https://github.com/dequelabs/axe-core) into the page and runs a WCAG 2.1 Level A & AA audit. Returns violations grouped by severity with fix instructions.
 
@@ -115,12 +118,15 @@ Measures Core Web Vitals using the browser's Performance API:
 - DOM node count, resource count, JS heap size
 
 ### `analyze_code`
-Scans frontend source files for 15+ categories of issues:
-- Missing alt attributes, form labels, ARIA
-- `!important` abuse, hardcoded colors, z-index chaos
-- Console.logs, TODO/FIXMEs, `any` types
+Scans frontend source files for 25+ categories of issues:
+- Missing alt attributes, form labels, ARIA, viewport meta
+- `!important` abuse, hardcoded colors, z-index chaos, font sizes < 12px
+- Console.logs, TODO/FIXMEs, `any` types, empty catch blocks
+- React hooks in conditionals, missing key props, inline event handlers
+- Direct DOM access in React/Vue, missing error boundaries
 - Large files, deep nesting, inline styles
 - Missing lazy loading, full library imports
+- `:focus` without `:focus-visible`
 
 ## Prompts
 
@@ -216,7 +222,7 @@ When using the `ui-review` prompt methodology, Claude evaluates:
 
 ## Code Analysis Rules
 
-The `analyze_code` tool checks for **15+ rules** across categories:
+The `analyze_code` tool checks for **25+ rules** across categories:
 
 | Rule | Severity | Category |
 |------|----------|----------|
@@ -224,16 +230,26 @@ The `analyze_code` tool checks for **15+ rules** across categories:
 | `click-no-keyboard` | High | Accessibility |
 | `no-form-label` | High | Accessibility |
 | `no-lang-attr` | Medium | Accessibility |
+| `missing-viewport-meta` | High | Accessibility |
+| `no-focus-visible` | Medium | Accessibility |
 | `console-log` | Low | Code Quality |
 | `todo-fixme` | Low | Code Quality |
 | `inline-style` | Medium | Code Quality |
 | `any-type` | Medium | Code Quality |
 | `magic-number` | Low | Code Quality |
+| `empty-catch` | High | Code Quality |
+| `react-hooks-conditional` | High | Code Quality |
+| `missing-key-prop` | High | Bug |
+| `direct-dom-access` | Medium | Code Quality |
+| `event-handler-inline` | Low | Code Quality |
 | `important-css` | Medium | Design |
 | `hardcoded-color` | Low | Design |
 | `z-index-high` | Medium | Design |
+| `font-too-small` | Medium | Design |
 | `no-lazy-image` | Medium | Performance |
 | `large-bundle-import` | Medium | Performance |
+| `no-error-boundary` | Medium | UX |
+| `missing-meta-description` | Medium | UX |
 | `large-file` | Medium/High | Code Quality |
 | `deep-nesting` | Medium/High | Code Quality |
 
