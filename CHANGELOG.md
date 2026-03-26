@@ -5,6 +5,19 @@ All notable changes to UIMax MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-26
+
+### Added
+- **Review history tracking** — `review_ui` now auto-saves a full review entry to `.uimax-reviews.json` after every run (timestamp, scores, findings, files flagged, summary)
+- `get_review_history` tool — view past reviews with optional URL filter and limit
+- `get_review_stats` tool — aggregate statistics: total reviews, score trends, most common issues, most problematic files
+- `review_diff` tool — compare two specific reviews to see what improved, regressed, was resolved, or is new
+- 40 new tests for review history system
+
+### Changed
+- Tool count: 32 → 35
+- Test count: 423 → 463
+
 ## [0.6.0] - 2026-03-26
 
 ### Added

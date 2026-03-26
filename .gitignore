@@ -9,4 +9,5 @@ coverage/
 *.tgz
 .puppeteer/
 .uimax-history.json
+.uimax-reviews.json
 .mcpregistry_*

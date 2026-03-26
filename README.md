@@ -6,8 +6,8 @@
   <img src="https://img.shields.io/npm/v/uimax-mcp" alt="npm version" />
   <img src="https://img.shields.io/npm/dm/uimax-mcp" alt="npm downloads" />
   <img src="https://img.shields.io/npm/l/uimax-mcp" alt="license" />
-  <img src="https://img.shields.io/badge/tools-32-blue" alt="32 tools" />
-  <img src="https://img.shields.io/badge/tests-423%20passing-brightgreen" alt="423 tests passing" />
+  <img src="https://img.shields.io/badge/tools-35-blue" alt="35 tools" />
+  <img src="https://img.shields.io/badge/tests-463%20passing-brightgreen" alt="463 tests passing" />
   <img src="https://img.shields.io/badge/coverage-87%25-brightgreen" alt="87% coverage" />
   <img src="https://img.shields.io/badge/cost-free%20(Pro%20plan)-brightgreen" alt="free for Pro plan" />
 </p>
@@ -77,7 +77,7 @@ npm install -g uimax-mcp
 
 ## Tools
 
-The MCP server exposes **32 tools** that Claude uses automatically:
+The MCP server exposes **35 tools** that Claude uses automatically:
 
 ### `review_ui` -- Full Automated Pipeline
 

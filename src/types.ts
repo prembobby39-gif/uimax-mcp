@@ -452,3 +452,100 @@ export interface ElementInfo {
   readonly isVisible: boolean;
   readonly screenshot: string;
 }
+
+// ── Review History ──────────────────────────────────────────────
+
+export interface ReviewScores {
+  readonly lighthouse: {
+    readonly performance: number | null;
+    readonly accessibility: number | null;
+    readonly bestPractices: number | null;
+    readonly seo: number | null;
+  };
+  readonly accessibilityViolations: number;
+  readonly codeIssues: {
+    readonly total: number;
+    readonly bySeverity: {
+      readonly critical: number;
+      readonly high: number;
+      readonly medium: number;
+      readonly low: number;
+    };
+  };
+  readonly performanceMetrics: {
+    readonly fcp: number | null;
+    readonly lcp: number | null;
+    readonly cls: number | null;
+    readonly tbt: number | null;
+  };
+}
+
+export interface ReviewFinding {
+  readonly rule: string;
+  readonly severity: string;
+  readonly message: string;
+  readonly file?: string;
+  readonly line?: number;
+}
+
+export interface ReviewFindings {
+  readonly total: number;
+  readonly bySeverity: {
+    readonly critical: number;
+    readonly high: number;
+    readonly medium: number;
+    readonly low: number;
+  };
+  readonly byCategory: Readonly<Record<string, number>>;
+  readonly topFindings: readonly ReviewFinding[];
+}
+
+export interface ReviewEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly url: string;
+  readonly codeDir?: string;
+  readonly duration: number;
+  readonly scores: ReviewScores;
+  readonly findings: ReviewFindings;
+  readonly filesAnalyzed: number;
+  readonly filesWithIssues: readonly string[];
+  readonly status: "completed" | "partial" | "failed";
+  readonly summary: string;
+}
+
+export interface ReviewHistoryFile {
+  readonly version: number;
+  readonly reviews: readonly ReviewEntry[];
+}
+
+export interface ReviewTrend {
+  readonly metric: string;
+  readonly first: number | null;
+  readonly latest: number | null;
+  readonly direction: "improved" | "regressed" | "unchanged" | "unknown";
+}
+
+export interface ReviewStats {
+  readonly totalReviews: number;
+  readonly totalIssuesFound: number;
+  readonly mostCommonIssues: readonly { readonly rule: string; readonly count: number }[];
+  readonly scoreTrends: readonly ReviewTrend[];
+  readonly mostImprovedMetric: string | null;
+  readonly mostProblematicFiles: readonly { readonly file: string; readonly count: number }[];
+}
+
+export interface ReviewDiff {
+  readonly entryA: ReviewEntry;
+  readonly entryB: ReviewEntry;
+  readonly newIssues: readonly ReviewFinding[];
+  readonly resolvedIssues: readonly ReviewFinding[];
+  readonly scoreChanges: readonly {
+    readonly metric: string;
+    readonly previous: number | null;
+    readonly current: number | null;
+    readonly delta: number | null;
+    readonly direction: "improved" | "regressed" | "unchanged" | "unknown";
+  }[];
+  readonly verdict: "improved" | "regressed" | "mixed" | "unchanged";
+}

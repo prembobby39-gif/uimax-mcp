@@ -64,6 +64,16 @@ import {
   waitForElement,
   getElementInfo,
 } from "./tools/interact.js";
+import {
+  saveReviewEntry,
+  loadReviewHistory,
+  getReviewStats,
+  diffReviews,
+  buildReviewEntry,
+  formatReviewHistory,
+  formatReviewStats,
+  formatReviewDiff,
+} from "./tools/review-history.js";
 
 // ── Baseline Data Collection ───────────────────────────────────────
 
@@ -116,7 +126,7 @@ async function runLighthouseSafe(
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
-    version: "0.6.0",
+    version: "0.7.0",
     // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
@@ -141,13 +151,39 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
     },
     async ({ url, codeDirectory, width, height }) => {
       try {
+        const startTime = Date.now();
+
         // Collect all audit data
         const auditData = await runFullReview(url, codeDirectory, {
           width: width ?? 1440,
           height: height ?? 900,
         });
 
+        const duration = Date.now() - startTime;
         const auditReport = formatFullReviewReport(auditData);
+
+        // Auto-save review entry (non-blocking — failure doesn't affect the review)
+        let historySaved = false;
+        try {
+          const reviewEntry = buildReviewEntry({
+            url,
+            codeDir: codeDirectory,
+            duration,
+            lighthouse: auditData.lighthouse ?? null,
+            accessibility: auditData.accessibility,
+            performance: auditData.performance,
+            codeAnalysis: auditData.codeAnalysis,
+            status: "completed",
+          });
+          await saveReviewEntry(reviewEntry, codeDirectory);
+          historySaved = true;
+        } catch {
+          // Review history save is non-blocking — the review still returns successfully
+        }
+
+        const historyNote = historySaved
+          ? `\n\nReview saved to .uimax-reviews.json (use get_review_history to see past reviews)`
+          : "";
 
         // Return screenshot + data + expert prompt to Claude Code
         // Claude Code (on the user's Pro plan) generates the expert review itself
@@ -214,6 +250,7 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
                 `4. After implementing all fixes, provide a summary of what was changed`,
                 ``,
                 `DO NOT just list the findings — actually edit the code files and fix them.`,
+                historyNote,
               ].join("\n"),
             },
           ],
@@ -1614,6 +1651,146 @@ Use this when you need to open a page before performing interactions, or to veri
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Get element failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // ── Review History Tools ──────────────────────────────────────
+
+  server.tool(
+    "get_review_history",
+    `View past UIMax reviews for this project. Shows when reviews were run, what scores were achieved, and how many issues were found. Use this to understand the project's frontend health over time.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      codeDir: z.string().optional().describe("Project directory containing .uimax-reviews.json (defaults to cwd)"),
+      limit: z.number().optional().default(10).describe("Maximum number of reviews to return (default 10)"),
+      url: z.string().optional().describe("Filter reviews by URL"),
+    },
+    async ({ codeDir, limit, url }) => {
+      try {
+        const entries = await loadReviewHistory(codeDir, {
+          limit: limit ?? 10,
+          url: url ?? undefined,
+        });
+
+        const formatted = formatReviewHistory(entries);
+
+        return {
+          content: [
+            { type: "text" as const, text: formatted },
+            {
+              type: "text" as const,
+              text: `\n\n<raw_data>\n${JSON.stringify(entries, null, 2)}\n</raw_data>`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Failed to load review history: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_review_stats",
+    `Get aggregate statistics across all UIMax reviews for this project. Shows total reviews, score trends, most common issues, and most problematic files.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      codeDir: z.string().optional().describe("Project directory containing .uimax-reviews.json (defaults to cwd)"),
+    },
+    async ({ codeDir }) => {
+      try {
+        const stats = await getReviewStats(codeDir);
+        const formatted = formatReviewStats(stats);
+
+        return {
+          content: [
+            { type: "text" as const, text: formatted },
+            {
+              type: "text" as const,
+              text: `\n\n<raw_data>\n${JSON.stringify(stats, null, 2)}\n</raw_data>`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Failed to load review stats: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "review_diff",
+    `Compare two specific reviews to see what changed. Shows new issues, resolved issues, and score changes.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      codeDir: z.string().optional().describe("Project directory containing .uimax-reviews.json (defaults to cwd)"),
+      reviewIdA: z.string().describe("ID of the older review to compare"),
+      reviewIdB: z.string().describe("ID of the newer review to compare (or 'latest' for the most recent review)"),
+    },
+    async ({ codeDir, reviewIdA, reviewIdB }) => {
+      try {
+        const entries = await loadReviewHistory(codeDir);
+
+        if (entries.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No reviews found. Run `review_ui` to start building your review history.",
+              },
+            ],
+          };
+        }
+
+        const entryA = entries.find((e) => e.id === reviewIdA);
+        if (!entryA) {
+          return {
+            content: [
+              { type: "text" as const, text: `Review not found: ${reviewIdA}` },
+            ],
+          };
+        }
+
+        const entryB = reviewIdB === "latest"
+          ? entries[0]
+          : entries.find((e) => e.id === reviewIdB);
+
+        if (!entryB) {
+          return {
+            content: [
+              { type: "text" as const, text: `Review not found: ${reviewIdB}` },
+            ],
+          };
+        }
+
+        const diff = diffReviews(entryA, entryB);
+        const formatted = formatReviewDiff(diff);
+
+        return {
+          content: [
+            { type: "text" as const, text: formatted },
+            {
+              type: "text" as const,
+              text: `\n\n<raw_data>\n${JSON.stringify(diff, null, 2)}\n</raw_data>`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Failed to compare reviews: ${message}` }],
           isError: true,
         };
       }
