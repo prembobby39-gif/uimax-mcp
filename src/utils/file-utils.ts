@@ -88,7 +88,8 @@ export interface FileInfo {
 
 export async function collectFrontendFiles(
   directory: string,
-  maxFiles: number = 200
+  maxFiles: number = 200,
+  additionalIgnorePatterns: readonly string[] = []
 ): Promise<readonly FileInfo[]> {
   const patterns = [
     "**/*.tsx",
@@ -115,6 +116,7 @@ export async function collectFrontendFiles(
     "**/__tests__/**",
     "**/*.test.*",
     "**/*.spec.*",
+    ...additionalIgnorePatterns,
   ];
 
   const allFiles: string[] = [];

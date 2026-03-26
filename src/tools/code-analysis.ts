@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve, join } from "node:path";
 import type { CodeFinding, CodeAnalysisResult, Severity, FindingCategory } from "../types.js";
 import {
   collectFrontendFiles,
@@ -262,6 +264,103 @@ const RULES: readonly Rule[] = [
   },
 ];
 
+// ── Config Loading ────────────────────────────────────────────────
+
+type RuleStatus = "off" | "warn" | "error";
+
+export interface UimaxConfig {
+  readonly rules: Record<string, RuleStatus>;
+  readonly severity: Record<string, Severity>;
+  readonly ignore: readonly string[];
+}
+
+const DEFAULT_CONFIG: UimaxConfig = {
+  rules: {},
+  severity: {},
+  ignore: [],
+};
+
+interface ConfigLoadResult {
+  readonly config: UimaxConfig;
+  readonly loaded: boolean;
+  readonly path: string | null;
+}
+
+function isValidRuleStatus(value: unknown): value is RuleStatus {
+  return value === "off" || value === "warn" || value === "error";
+}
+
+function isValidSeverity(value: unknown): value is Severity {
+  return value === "low" || value === "medium" || value === "high" || value === "critical";
+}
+
+function parseConfig(raw: unknown): UimaxConfig {
+  if (typeof raw !== "object" || raw === null) {
+    return DEFAULT_CONFIG;
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  const rules: Record<string, RuleStatus> = {};
+  if (typeof obj.rules === "object" && obj.rules !== null) {
+    for (const [key, value] of Object.entries(obj.rules as Record<string, unknown>)) {
+      if (isValidRuleStatus(value)) {
+        rules[key] = value;
+      }
+    }
+  }
+
+  const severity: Record<string, Severity> = {};
+  if (typeof obj.severity === "object" && obj.severity !== null) {
+    for (const [key, value] of Object.entries(obj.severity as Record<string, unknown>)) {
+      if (isValidSeverity(value)) {
+        severity[key] = value;
+      }
+    }
+  }
+
+  const ignore: string[] = [];
+  if (Array.isArray(obj.ignore)) {
+    for (const item of obj.ignore) {
+      if (typeof item === "string") {
+        ignore.push(item);
+      }
+    }
+  }
+
+  return { rules, severity, ignore };
+}
+
+/**
+ * Load `.uimaxrc.json` config from the given directory or up to 3 parent directories.
+ * Returns the parsed config and load status. Falls back to defaults on error.
+ */
+export async function loadConfig(directory: string): Promise<ConfigLoadResult> {
+  const searchDirs = [
+    directory,
+    resolve(directory, ".."),
+    resolve(directory, "..", ".."),
+    resolve(directory, "..", "..", ".."),
+  ];
+
+  for (const dir of searchDirs) {
+    const configPath = join(dir, ".uimaxrc.json");
+    try {
+      const content = await readFile(configPath, "utf-8");
+      const parsed = JSON.parse(content);
+      return {
+        config: parseConfig(parsed),
+        loaded: true,
+        path: configPath,
+      };
+    } catch {
+      // Config not found or unreadable in this directory, continue searching
+    }
+  }
+
+  return { config: DEFAULT_CONFIG, loaded: false, path: null };
+}
+
 // ── File-Level Checks ──────────────────────────────────────────────
 
 function checkFileSize(file: FileInfo): CodeFinding | null {
@@ -349,8 +448,35 @@ function checkMissingErrorBoundary(files: readonly FileInfo[]): CodeFinding | nu
 export async function analyzeCode(
   directory: string
 ): Promise<CodeAnalysisResult> {
+  const { config, loaded, path: configPath } = await loadConfig(directory);
+
   const framework = await detectFramework(directory);
-  const files = await collectFrontendFiles(directory);
+
+  // Convert config ignore patterns to glob-compatible patterns
+  const configIgnoreGlobs = config.ignore.map((pattern) => {
+    // If pattern has no glob chars and no extension, treat as a directory
+    if (!pattern.includes("*") && !pattern.includes(".")) {
+      return `${pattern}/**`;
+    }
+    // If it's a glob pattern like "*.test.*", ensure it matches in all directories
+    if (pattern.startsWith("*.")) {
+      return `**/${pattern}`;
+    }
+    return pattern;
+  });
+
+  const files = await collectFrontendFiles(directory, 200, configIgnoreGlobs);
+
+  // Filter RULES based on config (immutable — create a new filtered array)
+  const activeRules = RULES.filter((rule) => config.rules[rule.id] !== "off");
+
+  // Build a list of disabled rule IDs for reporting
+  const rulesDisabled = Object.entries(config.rules)
+    .filter(([, status]) => status === "off")
+    .map(([id]) => id);
+
+  // Build a list of severity-overridden rule IDs for reporting
+  const severityOverrides = Object.keys(config.severity);
 
   const findings: CodeFinding[] = [];
   let totalLines = 0;
@@ -368,12 +494,15 @@ export async function analyzeCode(
       stylesheetCount++;
     }
 
-    // Run pattern-based rules
-    for (const rule of RULES) {
+    // Run pattern-based rules (using filtered activeRules)
+    for (const rule of activeRules) {
       if (!rule.fileTypes.includes(file.extension)) continue;
 
       const matches = file.content.matchAll(rule.pattern);
       let matchCount = 0;
+
+      // Determine the effective severity: config override takes precedence
+      const effectiveSeverity = config.severity[rule.id] ?? rule.severity;
 
       for (const match of matches) {
         matchCount++;
@@ -386,7 +515,7 @@ export async function analyzeCode(
         findings.push({
           file: file.relativePath,
           line: lineNumber,
-          severity: rule.severity,
+          severity: effectiveSeverity,
           category: rule.category,
           rule: rule.id,
           message: rule.message,
@@ -443,6 +572,12 @@ export async function analyzeCode(
       avgFileSize,
       largestFiles,
     },
+    configStatus: {
+      loaded,
+      path: configPath,
+      rulesDisabled,
+      severityOverrides,
+    },
   };
 }
 
@@ -460,8 +595,19 @@ export function formatCodeAnalysisReport(result: CodeAnalysisResult): string {
     `**Avg File Size:** ${result.summary.avgFileSize} lines`,
     `**Components:** ${result.summary.components}`,
     `**Stylesheets:** ${result.summary.stylesheets}`,
-    ``,
   ];
+
+  if (result.configStatus.loaded) {
+    lines.push(`**Config:** Loaded from \`${result.configStatus.path}\``);
+    if (result.configStatus.rulesDisabled.length > 0) {
+      lines.push(`**Rules Disabled:** ${result.configStatus.rulesDisabled.join(", ")}`);
+    }
+    if (result.configStatus.severityOverrides.length > 0) {
+      lines.push(`**Severity Overrides:** ${result.configStatus.severityOverrides.join(", ")}`);
+    }
+  }
+
+  lines.push(``);
 
   if (result.summary.largestFiles.length > 0) {
     lines.push(`### Largest Files`);

@@ -1,12 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import { captureScreenshot, captureResponsiveScreenshots } from "./tools/screenshot.js";
 import { runAccessibilityAudit, formatAccessibilityReport } from "./tools/accessibility.js";
 import { measurePerformance, formatPerformanceReport } from "./tools/performance.js";
 import { analyzeCode, formatCodeAnalysisReport } from "./tools/code-analysis.js";
+import { runLighthouse, formatLighthouseReport } from "./tools/lighthouse.js";
 import { runFullReview, formatFullReviewReport } from "./tools/full-review.js";
+import { generateHtmlReport } from "./tools/html-report.js";
 import { checkDarkMode } from "./tools/dark-mode.js";
+import { compareScreenshots } from "./tools/compare.js";
 import { closeBrowser } from "./utils/browser.js";
 import {
   UI_REVIEW_PROMPT,
@@ -71,6 +76,14 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
                 `**Code files analyzed:** ${auditData.codeAnalysis.totalFiles}`,
                 `**Code findings:** ${auditData.codeAnalysis.findings.length}`,
                 `**Framework detected:** ${auditData.codeAnalysis.framework}`,
+                ...(auditData.lighthouse
+                  ? [
+                      `**Lighthouse Performance:** ${auditData.lighthouse.scores.performance ?? "N/A"}`,
+                      `**Lighthouse Accessibility:** ${auditData.lighthouse.scores.accessibility ?? "N/A"}`,
+                      `**Lighthouse Best Practices:** ${auditData.lighthouse.scores.bestPractices ?? "N/A"}`,
+                      `**Lighthouse SEO:** ${auditData.lighthouse.scores.seo ?? "N/A"}`,
+                    ]
+                  : [`**Lighthouse:** skipped (timed out or unavailable)`]),
                 ``,
                 `---`,
                 ``,
@@ -117,6 +130,68 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `UI review failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "export_report",
+    `Generate a standalone HTML report file with all audit findings embedded. Runs the full review pipeline (screenshot, accessibility, performance, code analysis) and outputs a beautiful, shareable HTML file with zero external dependencies.
+
+Use this when the user wants a downloadable/shareable report of their UI review.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      url: z.string().url().describe("URL of the running application (e.g., http://localhost:3000)"),
+      codeDirectory: z.string().describe("Absolute path to the frontend source directory (e.g., /Users/me/project/src)"),
+      outputPath: z.string().optional().describe("Output file path for the HTML report (defaults to ./uimax-report.html)"),
+    },
+    async ({ url, codeDirectory, outputPath }) => {
+      try {
+        const resolvedPath = resolve(outputPath ?? "./uimax-report.html");
+
+        // Run the full audit pipeline
+        const reviewData = await runFullReview(url, codeDirectory);
+
+        // Generate the self-contained HTML report
+        const html = generateHtmlReport(reviewData);
+
+        // Write to disk
+        await writeFile(resolvedPath, html, "utf-8");
+
+        const violationCount = reviewData.accessibility.violations.length;
+        const findingCount = reviewData.codeAnalysis.findings.length;
+        const totalIssues = violationCount + findingCount;
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `# UIMax Report Exported`,
+                ``,
+                `**File:** ${resolvedPath}`,
+                `**URL:** ${url}`,
+                `**Timestamp:** ${reviewData.timestamp}`,
+                ``,
+                `## Summary`,
+                `- Accessibility violations: ${violationCount}`,
+                `- Code findings: ${findingCount}`,
+                `- Total issues: ${totalIssues}`,
+                `- Load time: ${reviewData.performance.loadTime.toFixed(0)}ms`,
+                `- Files analyzed: ${reviewData.codeAnalysis.totalFiles}`,
+                ``,
+                `The HTML report is self-contained with all CSS inline and the screenshot embedded as base64. Open it in any browser to view or share.`,
+              ].join("\n"),
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Report export failed: ${message}` }],
           isError: true,
         };
       }
@@ -327,6 +402,100 @@ This tool is FREE — runs entirely within Claude Code.`,
   );
 
   server.tool(
+    "compare_screenshots",
+    "Before/after visual comparison. Captures screenshots of two URLs at the same viewport size, returns BOTH images for visual comparison, and calculates a difference percentage. Use this to verify UI changes, compare staging vs production, or check before/after states of a redesign.",
+    {
+      urlA: z.string().url().describe("First URL — the 'before' state (e.g., http://localhost:3000)"),
+      urlB: z.string().url().describe("Second URL — the 'after' state (e.g., http://localhost:3001)"),
+      width: z.number().optional().default(1440).describe("Viewport width in pixels"),
+      height: z.number().optional().default(900).describe("Viewport height in pixels"),
+    },
+    async ({ urlA, urlB, width, height }) => {
+      try {
+        const result = await compareScreenshots(urlA, urlB, {
+          width: width ?? 1440,
+          height: height ?? 900,
+        });
+
+        const diffSummary = result.differencePercent === 0
+          ? "The two pages are visually IDENTICAL (0% difference)"
+          : `Visual difference detected: ${result.differencePercent}% of the image data differs`;
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `# Screenshot Comparison`,
+                ``,
+                `**URL A (before):** ${result.urlA}`,
+                `**URL B (after):** ${result.urlB}`,
+                `**Viewport:** ${result.screenshotA.width}x${result.screenshotA.height}`,
+                `**Difference:** ${result.differencePercent}%`,
+                `**Result:** ${diffSummary}`,
+                ``,
+                `## Screenshot A (before):`,
+              ].join("\n"),
+            },
+            {
+              type: "image" as const,
+              data: result.screenshotA.base64,
+              mimeType: result.screenshotA.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: `\n## Screenshot B (after):`,
+            },
+            {
+              type: "image" as const,
+              data: result.screenshotB.base64,
+              mimeType: result.screenshotB.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: result.differencePercent > 0
+                ? [
+                    ``,
+                    `---`,
+                    ``,
+                    `## Comparison Analysis`,
+                    ``,
+                    `The two pages differ by **${result.differencePercent}%**. Compare the screenshots above carefully:`,
+                    `- Look for layout shifts, spacing changes, or element repositioning`,
+                    `- Check for color or typography differences`,
+                    `- Identify any missing or newly added elements`,
+                    `- Note any responsive or alignment regressions`,
+                    ``,
+                    `**Timestamps:**`,
+                    `- A captured: ${result.screenshotA.timestamp}`,
+                    `- B captured: ${result.screenshotB.timestamp}`,
+                  ].join("\n")
+                : [
+                    ``,
+                    `---`,
+                    ``,
+                    `## Comparison Analysis`,
+                    ``,
+                    `The two pages are **visually identical**. No differences detected between the before and after states.`,
+                    ``,
+                    `**Timestamps:**`,
+                    `- A captured: ${result.screenshotA.timestamp}`,
+                    `- B captured: ${result.screenshotB.timestamp}`,
+                  ].join("\n"),
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Screenshot comparison failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
     "accessibility_audit",
     "Run an automated accessibility audit using axe-core. Checks for WCAG 2.1 Level A and AA violations, reporting issues by severity with specific fix instructions.",
     {
@@ -380,6 +549,36 @@ This tool is FREE — runs entirely within Claude Code.`,
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Performance audit failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "lighthouse_audit",
+    "Run a full Lighthouse audit against a URL. Returns scores for Performance, Accessibility, Best Practices, and SEO (0-100), plus detailed audit findings for render-blocking resources, image optimization, unused code, and more. Heavier than performance_audit but provides industry-standard Lighthouse scores.",
+    {
+      url: z.string().url().describe("URL of the page to audit (e.g., http://localhost:3000)"),
+    },
+    async ({ url }) => {
+      try {
+        const result = await runLighthouse(url);
+        const report = formatLighthouseReport(result);
+
+        return {
+          content: [
+            { type: "text" as const, text: report },
+            {
+              type: "text" as const,
+              text: `\n\n<raw_data>\n${JSON.stringify(result, null, 2)}\n</raw_data>`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Lighthouse audit failed: ${message}` }],
           isError: true,
         };
       }

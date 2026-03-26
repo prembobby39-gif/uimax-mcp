@@ -92,6 +92,45 @@ export interface CodeAnalysisResult {
     readonly avgFileSize: number;
     readonly largestFiles: readonly { file: string; lines: number }[];
   };
+  readonly configStatus: {
+    readonly loaded: boolean;
+    readonly path: string | null;
+    readonly rulesDisabled: readonly string[];
+    readonly severityOverrides: readonly string[];
+  };
+}
+
+// ── Lighthouse ────────────────────────────────────────────────────
+
+/**
+ * Re-exported from tools/lighthouse.ts for type compatibility.
+ * The canonical types live in lighthouse.ts; this alias allows
+ * FullReviewResult to reference them without a circular import.
+ */
+export interface LighthouseScores {
+  readonly performance: number | null;
+  readonly accessibility: number | null;
+  readonly bestPractices: number | null;
+  readonly seo: number | null;
+}
+
+export interface LighthouseAuditEntry {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly score: number | null;
+  readonly displayValue: string | null;
+  readonly numericValue: number | null;
+  readonly numericUnit: string | null;
+}
+
+export interface LighthouseResultSummary {
+  readonly scores: LighthouseScores;
+  readonly audits: readonly LighthouseAuditEntry[];
+  readonly url: string;
+  readonly timestamp: string;
+  readonly lighthouseVersion: string;
+  readonly runWarnings: readonly string[];
 }
 
 // ── Full Review ────────────────────────────────────────────────────
@@ -104,4 +143,5 @@ export interface FullReviewResult {
   readonly accessibility: AccessibilityResult;
   readonly performance: PerformanceMetrics;
   readonly codeAnalysis: CodeAnalysisResult;
+  readonly lighthouse?: LighthouseResultSummary;
 }

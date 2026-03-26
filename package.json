@@ -14,7 +14,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "mcp",
@@ -40,11 +43,14 @@
     "@modelcontextprotocol/sdk": "^1.28.0",
     "axe-core": "^4.10.0",
     "glob": "^11.0.0",
+    "lighthouse": "^13.0.3",
     "puppeteer-core": "^24.0.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "@vitest/coverage-v8": "^4.1.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
   }
 }
