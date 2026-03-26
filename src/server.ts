@@ -12,6 +12,7 @@ import { runFullReview, formatFullReviewReport } from "./tools/full-review.js";
 import { generateHtmlReport } from "./tools/html-report.js";
 import { checkDarkMode } from "./tools/dark-mode.js";
 import { compareScreenshots } from "./tools/compare.js";
+import { crawlAndReview, formatCrawlReport } from "./tools/crawl.js";
 import { closeBrowser } from "./utils/browser.js";
 import {
   UI_REVIEW_PROMPT,
@@ -24,7 +25,7 @@ import {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
-    version: "0.3.0",
+    version: "0.4.0",
     // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
@@ -403,7 +404,7 @@ This tool is FREE — runs entirely within Claude Code.`,
 
   server.tool(
     "compare_screenshots",
-    "Before/after visual comparison. Captures screenshots of two URLs at the same viewport size, returns BOTH images for visual comparison, and calculates a difference percentage. Use this to verify UI changes, compare staging vs production, or check before/after states of a redesign.",
+    "Before/after visual comparison with pixel-level diffing. Captures screenshots of two URLs at the same viewport size, computes an accurate pixel-level difference using pixelmatch, and returns BOTH images plus a red-highlighted diff image showing exactly which pixels changed. Use this to verify UI changes, compare staging vs production, or check before/after states of a redesign.",
     {
       urlA: z.string().url().describe("First URL — the 'before' state (e.g., http://localhost:3000)"),
       urlB: z.string().url().describe("Second URL — the 'after' state (e.g., http://localhost:3001)"),
@@ -418,73 +419,86 @@ This tool is FREE — runs entirely within Claude Code.`,
         });
 
         const diffSummary = result.differencePercent === 0
-          ? "The two pages are visually IDENTICAL (0% difference)"
-          : `Visual difference detected: ${result.differencePercent}% of the image data differs`;
+          ? "The two pages are visually IDENTICAL (0% pixel difference)"
+          : `Visual difference detected: ${result.differencePercent}% of pixels differ (${result.pixelsChanged.toLocaleString()} pixels changed)`;
 
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: [
-                `# Screenshot Comparison`,
-                ``,
-                `**URL A (before):** ${result.urlA}`,
-                `**URL B (after):** ${result.urlB}`,
-                `**Viewport:** ${result.screenshotA.width}x${result.screenshotA.height}`,
-                `**Difference:** ${result.differencePercent}%`,
-                `**Result:** ${diffSummary}`,
-                ``,
-                `## Screenshot A (before):`,
-              ].join("\n"),
-            },
+        const headerContent = [
+          `# Screenshot Comparison (Pixel-Level Diff)`,
+          ``,
+          `**URL A (before):** ${result.urlA}`,
+          `**URL B (after):** ${result.urlB}`,
+          `**Viewport:** ${result.screenshotA.width}x${result.screenshotA.height}`,
+          `**Diff dimensions:** ${result.dimensions.width}x${result.dimensions.height}`,
+          `**Pixel difference:** ${result.differencePercent}%`,
+          `**Pixels changed:** ${result.pixelsChanged.toLocaleString()} / ${(result.dimensions.width * result.dimensions.height).toLocaleString()}`,
+          `**Result:** ${diffSummary}`,
+          ``,
+          `## Screenshot A (before):`,
+        ].join("\n");
+
+        const analysisContent = result.differencePercent > 0
+          ? [
+              ``,
+              `---`,
+              ``,
+              `## Comparison Analysis`,
+              ``,
+              `The two pages differ by **${result.differencePercent}%** (${result.pixelsChanged.toLocaleString()} pixels). The diff image above highlights changed pixels in red. Compare all three images:`,
+              `- Look for layout shifts, spacing changes, or element repositioning`,
+              `- Check for color or typography differences`,
+              `- Identify any missing or newly added elements`,
+              `- Note any responsive or alignment regressions`,
+              ``,
+              `**Timestamps:**`,
+              `- A captured: ${result.screenshotA.timestamp}`,
+              `- B captured: ${result.screenshotB.timestamp}`,
+            ].join("\n")
+          : [
+              ``,
+              `---`,
+              ``,
+              `## Comparison Analysis`,
+              ``,
+              `The two pages are **pixel-perfect identical**. No differences detected between the before and after states.`,
+              ``,
+              `**Timestamps:**`,
+              `- A captured: ${result.screenshotA.timestamp}`,
+              `- B captured: ${result.screenshotB.timestamp}`,
+            ].join("\n");
+
+        const content: Array<
+          | { type: "text"; text: string }
+          | { type: "image"; data: string; mimeType: "image/png" }
+        > = [
+          { type: "text" as const, text: headerContent },
+          {
+            type: "image" as const,
+            data: result.screenshotA.base64,
+            mimeType: result.screenshotA.mimeType,
+          },
+          { type: "text" as const, text: `\n## Screenshot B (after):` },
+          {
+            type: "image" as const,
+            data: result.screenshotB.base64,
+            mimeType: result.screenshotB.mimeType,
+          },
+        ];
+
+        // Only include the diff image when there are actual differences
+        if (result.differencePercent > 0) {
+          content.push(
+            { type: "text" as const, text: `\n## Diff Image (changed pixels in red):` },
             {
               type: "image" as const,
-              data: result.screenshotA.base64,
-              mimeType: result.screenshotA.mimeType,
+              data: result.diffImage,
+              mimeType: "image/png" as const,
             },
-            {
-              type: "text" as const,
-              text: `\n## Screenshot B (after):`,
-            },
-            {
-              type: "image" as const,
-              data: result.screenshotB.base64,
-              mimeType: result.screenshotB.mimeType,
-            },
-            {
-              type: "text" as const,
-              text: result.differencePercent > 0
-                ? [
-                    ``,
-                    `---`,
-                    ``,
-                    `## Comparison Analysis`,
-                    ``,
-                    `The two pages differ by **${result.differencePercent}%**. Compare the screenshots above carefully:`,
-                    `- Look for layout shifts, spacing changes, or element repositioning`,
-                    `- Check for color or typography differences`,
-                    `- Identify any missing or newly added elements`,
-                    `- Note any responsive or alignment regressions`,
-                    ``,
-                    `**Timestamps:**`,
-                    `- A captured: ${result.screenshotA.timestamp}`,
-                    `- B captured: ${result.screenshotB.timestamp}`,
-                  ].join("\n")
-                : [
-                    ``,
-                    `---`,
-                    ``,
-                    `## Comparison Analysis`,
-                    ``,
-                    `The two pages are **visually identical**. No differences detected between the before and after states.`,
-                    ``,
-                    `**Timestamps:**`,
-                    `- A captured: ${result.screenshotA.timestamp}`,
-                    `- B captured: ${result.screenshotB.timestamp}`,
-                  ].join("\n"),
-            },
-          ],
-        };
+          );
+        }
+
+        content.push({ type: "text" as const, text: analysisContent });
+
+        return { content };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
@@ -609,6 +623,65 @@ This tool is FREE — runs entirely within Claude Code.`,
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Code analysis failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "crawl_and_review",
+    `Crawl multiple pages from a starting URL and run accessibility + performance audits on each. Discovers internal links from the start page, deduplicates them, and visits up to maxPages (default 5, max 10). Each page gets a screenshot, axe-core accessibility audit, and Performance API metrics. Does NOT run Lighthouse (too slow for multi-page). Use this to audit an entire site section quickly.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      url: z.string().url().describe("Starting URL to crawl from (e.g., http://localhost:3000)"),
+      maxPages: z
+        .number()
+        .optional()
+        .default(5)
+        .describe("Maximum number of pages to audit (1-10, default 5)"),
+      codeDir: z
+        .string()
+        .optional()
+        .describe("Optional code directory path (reserved for future use)"),
+    },
+    async ({ url, maxPages }) => {
+      try {
+        const result = await crawlAndReview(url, maxPages);
+        const report = formatCrawlReport(result);
+
+        // Build content: text report + screenshots for each page
+        const content: Array<
+          | { type: "text"; text: string }
+          | { type: "image"; data: string; mimeType: "image/png" }
+        > = [
+          {
+            type: "text" as const,
+            text: report,
+          },
+        ];
+
+        // Append screenshots for each successfully audited page
+        for (const page of result.pages) {
+          if (page.screenshot) {
+            content.push({
+              type: "text" as const,
+              text: `\n### Screenshot: ${page.url}`,
+            });
+            content.push({
+              type: "image" as const,
+              data: page.screenshot.base64,
+              mimeType: page.screenshot.mimeType,
+            });
+          }
+        }
+
+        return { content };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Crawl and review failed: ${message}` }],
           isError: true,
         };
       }

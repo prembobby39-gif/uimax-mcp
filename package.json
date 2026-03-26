@@ -1,6 +1,6 @@
 {
   "name": "uimax-mcp",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "mcpName": "io.github.prembobby39-gif/uimax-mcp",
   "description": "UIMax MCP — Turns Claude Code into a frontend expert that reviews and fixes your UI automatically. Free for Pro plan users.",
   "type": "module",
@@ -25,6 +25,7 @@
     "mcp",
     "model-context-protocol",
     "claude",
+    "claude-code",
     "ui-review",
     "accessibility",
     "frontend",
@@ -32,11 +33,24 @@
     "web-audit",
     "axe-core",
     "puppeteer",
-    "claude-code",
+    "lighthouse",
     "dark-mode",
     "uimax",
-    "ui-expert"
+    "ui-expert",
+    "developer-tools",
+    "code-analysis",
+    "wcag",
+    "responsive-design",
+    "core-web-vitals"
   ],
+  "homepage": "https://github.com/prembobby39-gif/uimax-mcp",
+  "bugs": {
+    "url": "https://github.com/prembobby39-gif/uimax-mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prembobby39-gif/uimax-mcp.git"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -46,11 +60,14 @@
     "axe-core": "^4.10.0",
     "glob": "^11.0.0",
     "lighthouse": "^13.0.3",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
     "puppeteer-core": "^24.0.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
     "@vitest/coverage-v8": "^4.1.1",
     "typescript": "^5.7.0",
     "vitest": "^4.1.1"

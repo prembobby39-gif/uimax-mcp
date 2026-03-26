@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "console-log": "off",
+    "magic-number": "off",
+    "hardcoded-color": "warn",
+    "inline-style": "error",
+    "img-no-alt": "error",
+    "click-no-keyboard": "error",
+    "no-form-label": "error",
+    "missing-viewport-meta": "error",
+    "no-lang-attr": "warn",
+    "no-focus-visible": "warn",
+    "empty-catch": "error",
+    "react-hooks-conditional": "error",
+    "missing-key-prop": "error",
+    "todo-fixme": "off",
+    "any-type": "warn",
+    "direct-dom-access": "warn",
+    "event-handler-inline": "off",
+    "important-css": "warn",
+    "z-index-high": "warn",
+    "font-too-small": "warn",
+    "no-lazy-image": "warn",
+    "large-bundle-import": "warn",
+    "no-error-boundary": "warn",
+    "missing-meta-description": "warn",
+    "large-file": "warn",
+    "deep-nesting": "warn"
+  },
+  "severity": {
+    "console-log": "low",
+    "todo-fixme": "low"
+  },
+  "ignore": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "*.test.*",
+    "*.spec.*",
+    "*.stories.*"
+  ]
+}

@@ -1,7 +1,13 @@
 src/
+*.ts
+!dist/**/*.js
+!dist/**/*.d.ts
 tsconfig.json
+vitest.config.ts
+.github/
 .gitignore
-.env*
-*.log
+.uimaxrc.example.json
 coverage/
+*.tgz
 .DS_Store
+glama.json

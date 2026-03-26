@@ -133,6 +133,25 @@ export interface LighthouseResultSummary {
   readonly runWarnings: readonly string[];
 }
 
+// ── Crawl ─────────────────────────────────────────────────────────
+
+export interface CrawlPageResult {
+  readonly url: string;
+  readonly screenshot: ScreenshotResult | null;
+  readonly accessibilityIssues: readonly AccessibilityViolation[];
+  readonly accessibilityPasses: number;
+  readonly performanceMetrics: PerformanceMetrics | null;
+  readonly error: string | null;
+}
+
+export interface CrawlResult {
+  readonly startUrl: string;
+  readonly timestamp: string;
+  readonly pagesAudited: number;
+  readonly pagesRequested: number;
+  readonly pages: readonly CrawlPageResult[];
+}
+
 // ── Full Review ────────────────────────────────────────────────────
 
 export interface FullReviewResult {

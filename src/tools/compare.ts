@@ -1,4 +1,5 @@
 import { createPage, navigateAndWait, closePage } from "../utils/browser.js";
+import { computePixelDiff } from "../utils/pixel-diff.js";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -15,41 +16,14 @@ export interface ComparisonResult {
   readonly screenshotA: ComparisonScreenshot;
   readonly screenshotB: ComparisonScreenshot;
   readonly differencePercent: number;
+  readonly pixelsChanged: number;
+  readonly dimensions: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly diffImage: string;
   readonly urlA: string;
   readonly urlB: string;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────
-
-/**
- * Compare two base64 strings character-by-character and return the
- * percentage of characters that differ. Returns 0 when the strings
- * are identical.
- */
-function calculateBase64DifferencePercent(
-  base64A: string,
-  base64B: string
-): number {
-  if (base64A === base64B) {
-    return 0;
-  }
-
-  const maxLength = Math.max(base64A.length, base64B.length);
-
-  if (maxLength === 0) {
-    return 0;
-  }
-
-  let differingCharacters = 0;
-
-  for (let i = 0; i < maxLength; i++) {
-    if (base64A[i] !== base64B[i]) {
-      differingCharacters++;
-    }
-  }
-
-  const rawPercent = (differingCharacters / maxLength) * 100;
-  return Math.round(rawPercent * 100) / 100;
 }
 
 // ── Screenshot capture ──────────────────────────────────────────
@@ -60,7 +34,7 @@ const DEFAULT_SETTLE_DELAY = 1000;
 async function captureUrlScreenshot(
   url: string,
   width: number,
-  height: number
+  height: number,
 ): Promise<ComparisonScreenshot> {
   const page = await createPage(width, height, DEFAULT_DEVICE_SCALE_FACTOR);
 
@@ -92,16 +66,16 @@ async function captureUrlScreenshot(
 
 /**
  * Compare two URLs by capturing screenshots of each and computing
- * the difference between them.
+ * the pixel-level difference between them.
  *
- * Captures both pages at the same viewport dimensions, then compares
- * the resulting screenshots via base64 string comparison. Returns
- * both screenshots, metadata, and the approximate difference percentage.
+ * Captures both pages at the same viewport dimensions, then uses
+ * pixelmatch to compute an accurate pixel difference. Returns both
+ * screenshots, a red-highlighted diff image, and difference metrics.
  */
 export async function compareScreenshots(
   urlA: string,
   urlB: string,
-  options?: { readonly width?: number; readonly height?: number }
+  options?: { readonly width?: number; readonly height?: number },
 ): Promise<ComparisonResult> {
   const width = options?.width ?? 1440;
   const height = options?.height ?? 900;
@@ -109,15 +83,18 @@ export async function compareScreenshots(
   const screenshotA = await captureUrlScreenshot(urlA, width, height);
   const screenshotB = await captureUrlScreenshot(urlB, width, height);
 
-  const differencePercent = calculateBase64DifferencePercent(
-    screenshotA.base64,
-    screenshotB.base64
-  );
+  const diffResult = computePixelDiff({
+    base64A: screenshotA.base64,
+    base64B: screenshotB.base64,
+  });
 
   return {
     screenshotA,
     screenshotB,
-    differencePercent,
+    differencePercent: diffResult.differencePercent,
+    pixelsChanged: diffResult.pixelsChanged,
+    dimensions: diffResult.dimensions,
+    diffImage: diffResult.diffImageBase64,
     urlA,
     urlB,
   };

@@ -6,8 +6,8 @@
   <img src="https://img.shields.io/npm/v/uimax-mcp" alt="npm version" />
   <img src="https://img.shields.io/npm/dm/uimax-mcp" alt="npm downloads" />
   <img src="https://img.shields.io/npm/l/uimax-mcp" alt="license" />
-  <img src="https://img.shields.io/badge/tools-12-blue" alt="12 tools" />
-  <img src="https://img.shields.io/badge/tests-167%20passing-brightgreen" alt="167 tests passing" />
+  <img src="https://img.shields.io/badge/tools-13-blue" alt="13 tools" />
+  <img src="https://img.shields.io/badge/tests-214%20passing-brightgreen" alt="214 tests passing" />
   <img src="https://img.shields.io/badge/coverage-87%25-brightgreen" alt="87% coverage" />
   <img src="https://img.shields.io/badge/cost-free%20(Pro%20plan)-brightgreen" alt="free for Pro plan" />
 </p>
@@ -77,7 +77,7 @@ npm install -g uimax-mcp
 
 ## Tools
 
-The MCP server exposes **12 tools** that Claude uses automatically:
+The MCP server exposes **13 tools** that Claude uses automatically:
 
 ### `review_ui` -- Full Automated Pipeline
 
@@ -111,14 +111,14 @@ Runs a full **Google Lighthouse** audit and returns real scores for:
 Plus detailed findings for failing audits with fix instructions. This is the real Lighthouse — the same tool Chrome DevTools uses.
 
 ### `compare_screenshots`
-**Before/after visual comparison.** Give it two URLs — captures both, returns them side by side with a difference percentage. Perfect for:
+**Before/after visual comparison with pixel-level diffing.** Give it two URLs — captures both, runs `pixelmatch` to compute exact pixel differences, and generates a red-highlighted diff image showing what changed. Perfect for:
 - Verifying UI fixes actually changed what you expected
 - Comparing staging vs production
 - Visual regression checking
 
 ```
 Input:  URL A ("before") + URL B ("after")
-Output: Both screenshots + difference percentage + metadata
+Output: Both screenshots + diff image + pixel difference % + pixels changed + dimensions
 ```
 
 ### `export_report`
@@ -148,6 +148,14 @@ Measures Core Web Vitals using the browser's Performance API:
 - Cumulative Layout Shift (CLS)
 - Total Blocking Time (TBT)
 - DOM node count, resource count, JS heap size
+
+### `crawl_and_review`
+**Multi-page audit from a single URL.** Give it one URL and it discovers all internal links, then audits up to 10 pages — each getting a screenshot, axe-core accessibility audit, and Core Web Vitals measurement. Perfect for reviewing an entire site without running page-by-page.
+
+```
+Input:  Starting URL + maxPages (optional, default 5) + code directory (optional)
+Output: Per-page screenshots + accessibility issues + performance metrics + overall summary
+```
 
 ### `analyze_code`
 Scans frontend source files for **25+ categories** of issues. Supports custom configuration via `.uimaxrc.json` (see [Configuration](#configuration)).
@@ -406,7 +414,7 @@ Contributions welcome! Some ideas:
 - [ ] CSS specificity analyzer
 - [ ] Design token extraction
 - [ ] Framework-specific checks (Vue composition API, Svelte stores)
-- [ ] Visual regression with pixel-level diffing
+- [x] Visual regression with pixel-level diffing
 - [ ] Performance budgets (fail if bundle > X KB)
 - [ ] Custom rule plugins (user-defined regex rules)
 - [ ] Figma design comparison (screenshot vs Figma mock)
