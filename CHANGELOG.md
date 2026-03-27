@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 40 new tests for review history system
 
 ### Changed
-- Tool count: 32 → 35
+- Tool count: 32 → 34
 - Test count: 423 → 463
 
 ## [0.6.0] - 2026-03-26

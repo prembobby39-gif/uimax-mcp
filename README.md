@@ -66,7 +66,7 @@ npm install -g uimax-mcp
 
 ---
 
-## Tools (35)
+## Tools (34)
 
 ### Review Pipeline
 
