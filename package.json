@@ -66,6 +66,10 @@
     "typescript": "^5.9.3",
     "zod": "^3.24.0"
   },
+  "overrides": {
+    "brace-expansion": ">=5.0.5",
+    "minimatch": ">=10.0.3"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pngjs": "^6.0.5",
