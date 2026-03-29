@@ -596,3 +596,59 @@ export interface ReviewDiff {
   }[];
   readonly verdict: "improved" | "regressed" | "mixed" | "unchanged";
 }
+
+// ── Verify Fixes ────────────────────────────────────────────────────
+
+export interface VerifyGradeTransition {
+  readonly section: string;
+  readonly beforeGrade: string;
+  readonly beforeScore: number;
+  readonly afterGrade: string;
+  readonly afterScore: number;
+  readonly delta: number;
+  readonly direction: "improved" | "regressed" | "unchanged";
+}
+
+export interface VerifyIssuesSummary {
+  readonly beforeTotal: number;
+  readonly afterTotal: number;
+  readonly resolved: number;
+  readonly remaining: number;
+  readonly newlyIntroduced: number;
+}
+
+export interface VerifyFixesResult {
+  readonly url: string;
+  readonly codeDirectory: string;
+  readonly timestamp: string;
+  readonly gradeTransitions: readonly VerifyGradeTransition[];
+  readonly issuesSummary: VerifyIssuesSummary;
+  readonly overallVerdict: "improved" | "regressed" | "mixed" | "unchanged";
+}
+
+// ── Compare Sites ───────────────────────────────────────────────────
+
+export interface SiteGradeEntry {
+  readonly category: string;
+  readonly grade: string;
+  readonly score: number;
+}
+
+export interface SiteComparisonEntry {
+  readonly category: string;
+  readonly siteAGrade: string;
+  readonly siteAScore: number;
+  readonly siteBGrade: string;
+  readonly siteBScore: number;
+  readonly winner: "siteA" | "siteB" | "tie";
+  readonly delta: number;
+}
+
+export interface SiteComparisonSummary {
+  readonly timestamp: string;
+  readonly urlA: string;
+  readonly urlB: string;
+  readonly categories: readonly SiteComparisonEntry[];
+  readonly overallWinner: "siteA" | "siteB" | "tie";
+  readonly summary: string;
+}

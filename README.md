@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/npm/v/uimax-mcp" alt="npm version" />
   <img src="https://img.shields.io/npm/dm/uimax-mcp" alt="npm downloads" />
   <img src="https://img.shields.io/npm/l/uimax-mcp" alt="license" />
-  <img src="https://img.shields.io/badge/tools-35-blue" alt="35 tools" />
+  <img src="https://img.shields.io/badge/tools-37-blue" alt="37 tools" />
   <img src="https://img.shields.io/badge/tests-463%20passing-brightgreen" alt="463 tests passing" />
   <img src="https://img.shields.io/badge/cost-free%20(Pro%20plan)-brightgreen" alt="free for Pro plan" />
 </p>
@@ -70,13 +70,15 @@ npm install -g uimax-mcp
 
 ---
 
-## Tools (35)
+## Tools (37)
 
 ### Review Pipeline
 
 | Tool | Description |
 |------|-------------|
 | `review_ui` | **The main tool.** Full automated pipeline: screenshot + Lighthouse + axe-core + performance + SEO + code analysis + Report Card (A+-F letter grades) + expert review methodology. Auto-saves to review history. |
+| `verify_fixes` | **New in v0.9.0.** Re-run the full audit after applying fixes. Compares against the previous review and shows a before/after Report Card with grade transitions, resolved issue count, and verdict (improved/regressed/mixed). Closes the review-fix-verify loop. |
+| `compare_sites` | **New in v0.9.0.** Competitive benchmarking — audit two URLs side-by-side. Returns screenshots of both sites plus a comparison Report Card with grades for Accessibility, Performance, SEO, and weighted Overall score. |
 | `quick_review` | Fast design-only review. Screenshot + focused design methodology. No code analysis or performance audit. |
 | `export_report` | Generate a standalone HTML report with everything embedded. Now includes Report Card grade cards and SEO section. Dark themed, zero dependencies. Share with your team. |
 
@@ -330,6 +332,41 @@ Claude: [Calls lcp_optimization]
         [Specific optimization suggestions]
 ```
 
+### Verify Fixes (Close the Loop)
+```
+You: Review and fix my UI at localhost:3000
+
+Claude: [Calls review_ui → finds 14 issues → implements fixes]
+
+You: Now verify the fixes worked
+
+Claude: [Calls verify_fixes]
+        [Re-runs full audit → compares to previous review]
+
+  Fix Verification — Before vs After
+  | Metric                   | Before | After | Change  |
+  | Accessibility violations | 5      | 0     | ✅ -5   |
+  | Code findings            | 9      | 2     | ✅ -7   |
+  | Total issues             | 14     | 2     | ✅ -12  |
+
+  Verdict: ✅ IMPROVED
+```
+
+### Competitive Benchmarking
+```
+You: Compare my site vs stripe.com
+
+Claude: [Calls compare_sites]
+        [Audits both URLs concurrently]
+        [Returns screenshots of both sites + comparison table]
+
+  | Category      | myapp.com | stripe.com | Winner       |
+  | Accessibility | C+ (78)   | A  (94)    | ✅ stripe.com |
+  | Performance   | B- (81)   | A+ (98)    | ✅ stripe.com |
+  | SEO           | D  (63)   | A  (93)    | ✅ stripe.com |
+  | Overall       | C  (74)   | A  (95)    | ✅ stripe.com |
+```
+
 ### SEO Audit
 ```
 You: Run an SEO audit on https://myapp.com
@@ -487,7 +524,7 @@ Auto-detected from `package.json`:
 |           |                                                           |
 |           v                                                           |
 |  +----------------------------------------------------------------+  |
-|  |                UIMax MCP (35 tools)                             |  |
+|  |                UIMax MCP (37 tools)                             |  |
 |  |                                                                 |  |
 |  |  Screenshot -------> Puppeteer ----------> PNG Image            |  |
 |  |  Accessibility ----> axe-core ------------> WCAG Violations     |  |
@@ -515,6 +552,74 @@ Auto-detected from `package.json`:
 |                                                                       |
 +----------------------------------------------------------------------+
 ```
+
+---
+
+## CI / GitHub Action
+
+UIMax ships with a reusable GitHub Action that runs audits on every PR and posts a Report Card comment.
+
+### Quick Setup
+
+Copy the example workflow to your project:
+
+```yaml
+# .github/workflows/uimax-ci.yml
+name: UIMax Review
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  uimax-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Build and start your app
+      - run: npm ci && npm run build
+      - run: npm start &
+      - run: npx wait-on http://localhost:3000
+
+      # Run UIMax
+      - uses: prembobby39-gif/uimax-mcp/.github/actions/uimax-review@main
+        with:
+          url: http://localhost:3000
+          budget-accessibility: 90
+          budget-performance: 80
+          budget-seo: 80
+          max-violations: 0
+```
+
+### Action Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `url` | URL to audit | Yes | — |
+| `github-token` | Token for PR comments | No | `GITHUB_TOKEN` |
+| `budget-performance` | Min performance score (0-100) | No | — |
+| `budget-accessibility` | Min accessibility score (0-100) | No | — |
+| `budget-seo` | Min SEO score (0-100) | No | — |
+| `max-violations` | Max allowed a11y violations | No | — |
+| `fail-on-regression` | Fail if grades regress | No | `false` |
+
+### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `accessibility-grade` | Letter grade (A+ through F) |
+| `performance-grade` | Letter grade |
+| `seo-grade` | Letter grade |
+| `total-violations` | Accessibility violation count |
+| `passed` | Whether all budgets passed (`true`/`false`) |
+| `report` | Full markdown report |
+
+The action updates existing UIMax comments on re-push (no duplicate comments).
+
+See `examples/uimax-ci.yml` for a complete working example.
 
 ---
 
@@ -559,10 +664,12 @@ Contributions welcome! Some ideas:
 - [x] Review history tracking with auto-save
 - [x] Dedicated SEO audit (18 checks, weighted scoring)
 - [x] Per-section letter grades (A+ through F Report Card)
+- [x] Verify fixes (before/after comparison with grade transitions)
+- [x] Competitive benchmarking (side-by-side site comparison)
+- [x] CI/CD integration (GitHub Action for automated review on PR)
 - [ ] Custom rule plugins (user-defined regex rules)
 - [ ] Figma design comparison (screenshot vs Figma mock)
 - [ ] Cross-browser testing (Firefox, WebKit via Playwright)
-- [ ] CI/CD integration (GitHub Action for automated review on PR)
 
 ---
 

@@ -1,0 +1,194 @@
+name: "UIMax Review"
+description: "Run UIMax accessibility, performance, and SEO audits on a URL and post results as a PR comment"
+branding:
+  icon: "eye"
+  color: "purple"
+
+inputs:
+  url:
+    description: "URL to audit (e.g., http://localhost:3000 or your preview URL)"
+    required: true
+  github-token:
+    description: "GitHub token for posting PR comments (defaults to GITHUB_TOKEN)"
+    required: false
+    default: ${{ github.token }}
+  budget-performance:
+    description: "Minimum Lighthouse performance score (0-100, optional)"
+    required: false
+  budget-accessibility:
+    description: "Minimum accessibility score (0-100, optional)"
+    required: false
+  budget-seo:
+    description: "Minimum SEO score (0-100, optional)"
+    required: false
+  max-violations:
+    description: "Maximum allowed accessibility violations (optional)"
+    required: false
+  fail-on-regression:
+    description: "Fail the check if any grade regresses from baseline (default: false)"
+    required: false
+    default: "false"
+
+outputs:
+  accessibility-grade:
+    description: "Accessibility letter grade (A+ through F)"
+  performance-grade:
+    description: "Performance letter grade (A+ through F)"
+  seo-grade:
+    description: "SEO letter grade (A+ through F)"
+  total-violations:
+    description: "Total accessibility violations found"
+  passed:
+    description: "Whether all budget checks passed (true/false)"
+  report:
+    description: "Full audit report in markdown"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install UIMax
+      shell: bash
+      run: npm install -g uimax-mcp
+
+    - name: Run UIMax Audit
+      id: audit
+      shell: bash
+      run: |
+        node -e "
+        const { runAccessibilityAudit } = require('uimax-mcp/dist/tools/accessibility.js');
+        const { measurePerformance } = require('uimax-mcp/dist/tools/performance.js');
+        const { runSeoAudit } = require('uimax-mcp/dist/tools/seo.js');
+        const { computeAccessibilityGrade, computePerformanceGrade, scoreToGrade } = require('uimax-mcp/dist/utils/grading.js');
+
+        async function main() {
+          const url = '${{ inputs.url }}';
+          console.log('Auditing:', url);
+
+          const [a11y, perf, seo] = await Promise.all([
+            runAccessibilityAudit(url),
+            measurePerformance(url),
+            runSeoAudit(url).catch(() => null),
+          ]);
+
+          const a11yGrade = computeAccessibilityGrade({
+            lighthouseScore: null,
+            violationCount: a11y.violations.length,
+            passCount: a11y.passes,
+          });
+
+          const perfGrade = computePerformanceGrade({
+            lighthouseScore: null,
+            fcp: perf.firstContentfulPaint,
+            lcp: perf.largestContentfulPaint,
+            cls: perf.cumulativeLayoutShift,
+            tbt: perf.totalBlockingTime,
+          });
+
+          const seoGrade = seo ? scoreToGrade(seo.score) : scoreToGrade(50);
+
+          // Budget checks
+          let passed = true;
+          const failures = [];
+
+          const budgetPerf = '${{ inputs.budget-performance }}';
+          if (budgetPerf && perfGrade.score < parseInt(budgetPerf)) {
+            passed = false;
+            failures.push('Performance ' + perfGrade.score + ' < ' + budgetPerf);
+          }
+
+          const budgetA11y = '${{ inputs.budget-accessibility }}';
+          if (budgetA11y && a11yGrade.score < parseInt(budgetA11y)) {
+            passed = false;
+            failures.push('Accessibility ' + a11yGrade.score + ' < ' + budgetA11y);
+          }
+
+          const budgetSeo = '${{ inputs.budget-seo }}';
+          if (budgetSeo && seoGrade.score < parseInt(budgetSeo)) {
+            passed = false;
+            failures.push('SEO ' + seoGrade.score + ' < ' + budgetSeo);
+          }
+
+          const maxViolations = '${{ inputs.max-violations }}';
+          if (maxViolations && a11y.violations.length > parseInt(maxViolations)) {
+            passed = false;
+            failures.push('Violations ' + a11y.violations.length + ' > ' + maxViolations);
+          }
+
+          // Build report
+          const report = [
+            '## UIMax Audit Report',
+            '',
+            '| Category | Grade | Score |',
+            '|----------|-------|-------|',
+            '| Accessibility | **' + a11yGrade.grade + '** | ' + a11yGrade.score + '/100 |',
+            '| Performance | **' + perfGrade.grade + '** | ' + perfGrade.score + '/100 |',
+            '| SEO | **' + seoGrade.grade + '** | ' + seoGrade.score + '/100 |',
+            '',
+            '### Details',
+            '- Accessibility violations: ' + a11y.violations.length,
+            '- Load time: ' + perf.loadTime.toFixed(0) + 'ms',
+            '- FCP: ' + (perf.firstContentfulPaint || 'N/A') + 'ms',
+            '- LCP: ' + (perf.largestContentfulPaint || 'N/A') + 'ms',
+            '- CLS: ' + (perf.cumulativeLayoutShift || 'N/A'),
+            '- DOM nodes: ' + perf.domNodes,
+            seo ? '- SEO checks: ' + seo.passed + '/' + (seo.passed + seo.failed) + ' passed' : '',
+            '',
+            passed ? '✅ All budget checks passed' : '❌ Budget failures: ' + failures.join(', '),
+            '',
+            '---',
+            '*Audited by [UIMax MCP](https://github.com/prembobby39-gif/uimax-mcp)*',
+          ].join('\\n');
+
+          // Write outputs
+          const fs = require('fs');
+          const outputFile = process.env.GITHUB_OUTPUT;
+          if (outputFile) {
+            fs.appendFileSync(outputFile, 'accessibility-grade=' + a11yGrade.grade + '\\n');
+            fs.appendFileSync(outputFile, 'performance-grade=' + perfGrade.grade + '\\n');
+            fs.appendFileSync(outputFile, 'seo-grade=' + seoGrade.grade + '\\n');
+            fs.appendFileSync(outputFile, 'total-violations=' + a11y.violations.length + '\\n');
+            fs.appendFileSync(outputFile, 'passed=' + passed + '\\n');
+
+            // Multiline output for report
+            const delimiter = 'EOF_' + Date.now();
+            fs.appendFileSync(outputFile, 'report<<' + delimiter + '\\n');
+            fs.appendFileSync(outputFile, report + '\\n');
+            fs.appendFileSync(outputFile, delimiter + '\\n');
+          }
+
+          // Write report to file for comment step
+          fs.writeFileSync('/tmp/uimax-report.md', report);
+
+          if (!passed) {
+            process.exit(1);
+          }
+        }
+
+        main().catch(err => { console.error(err); process.exit(1); });
+        "
+
+    - name: Post PR Comment
+      if: github.event_name == 'pull_request' && always()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -f /tmp/uimax-report.md ]; then
+          COMMENT_BODY=$(cat /tmp/uimax-report.md)
+
+          # Check if a UIMax comment already exists and update it
+          EXISTING_COMMENT=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.body | contains("UIMax Audit Report")) | .id' \
+            2>/dev/null | head -1)
+
+          if [ -n "$EXISTING_COMMENT" ]; then
+            gh api \
+              repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT \
+              -X PATCH \
+              -f body="$COMMENT_BODY"
+          else
+            gh pr comment ${{ github.event.pull_request.number }} \
+              --body "$COMMENT_BODY"
+          fi
+        fi

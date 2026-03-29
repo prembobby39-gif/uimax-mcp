@@ -1,0 +1,39 @@
+# Example: UIMax CI workflow for your project
+# Copy this to .github/workflows/uimax-ci.yml in your repo
+#
+# This runs UIMax audits on every PR and posts a Report Card comment
+# with accessibility, performance, and SEO grades.
+
+name: UIMax Review
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  uimax-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ── Build your app (customize this) ──
+      - run: npm ci
+      - run: npm run build
+
+      # ── Start your app in the background ──
+      - run: npm start &
+      - run: npx wait-on http://localhost:3000 --timeout 30000
+
+      # ── Run UIMax ──
+      - name: UIMax Audit
+        uses: prembobby39-gif/uimax-mcp/.github/actions/uimax-review@main
+        with:
+          url: http://localhost:3000
+          budget-accessibility: 90
+          budget-performance: 80
+          budget-seo: 80
+          max-violations: 0

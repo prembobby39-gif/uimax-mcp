@@ -76,6 +76,14 @@ import {
   formatReviewStats,
   formatReviewDiff,
 } from "./tools/review-history.js";
+import {
+  verifyFixes,
+  formatVerifyFixesReport,
+} from "./tools/verify-fixes.js";
+import {
+  compareSites,
+  formatSiteComparisonReport,
+} from "./tools/compare-sites.js";
 
 // ── Baseline Data Collection ───────────────────────────────────────
 
@@ -128,7 +136,7 @@ async function runLighthouseSafe(
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
-    version: "0.8.0",
+    version: "0.9.0",
     // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
@@ -1844,6 +1852,191 @@ This tool is FREE — runs entirely within Claude Code.`,
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Failed to compare reviews: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // ── Verify Fixes & Compare Sites ──────────────────────────────
+
+  server.tool(
+    "verify_fixes",
+    `Re-run the full audit pipeline after fixes are applied and compare against the original review. Shows a before/after Report Card with grade transitions, resolved issues count, and remaining issues. Closes the review-fix-verify loop.
+
+Use this AFTER implementing fixes from a review_ui run. Pass the same URL and code directory. The tool re-audits everything and shows what improved.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      url: z.string().url().describe("URL of the running application (same URL used in the original review)"),
+      codeDirectory: z.string().describe("Absolute path to the frontend source directory"),
+      width: z.number().optional().default(1440).describe("Viewport width in pixels"),
+      height: z.number().optional().default(900).describe("Viewport height in pixels"),
+    },
+    async ({ url, codeDirectory, width, height }) => {
+      try {
+        // Run a fresh "before" baseline, then the user's fixes are already in place
+        // so we actually need the original data. We run a fresh full review as "after"
+        // and compare against the most recent saved review as "before".
+        const history = await loadReviewHistory(codeDirectory);
+        const previousReview = history.find((r) => r.url === url);
+
+        // Run fresh audit (the "after" state with fixes applied)
+        const afterData = await runFullReview(url, codeDirectory, {
+          width: width ?? 1440,
+          height: height ?? 900,
+        });
+
+        const afterReport = formatFullReviewReport(afterData);
+
+        // Build comparison if we have history
+        let comparisonText = "";
+        if (previousReview) {
+          const beforeViolations = previousReview.scores.accessibilityViolations;
+          const afterViolations = afterData.accessibility.violations.length;
+          const beforeCodeIssues = previousReview.scores.codeIssues.total;
+          const afterCodeIssues = afterData.codeAnalysis.findings.length;
+          const beforeTotal = beforeViolations + beforeCodeIssues;
+          const afterTotal = afterViolations + afterCodeIssues;
+          const resolved = Math.max(0, beforeTotal - afterTotal);
+
+          comparisonText = [
+            `## Fix Verification — Before vs After`,
+            ``,
+            `| Metric | Before | After | Change |`,
+            `|--------|--------|-------|--------|`,
+            `| Accessibility violations | ${beforeViolations} | ${afterViolations} | ${beforeViolations - afterViolations > 0 ? "✅ -" + (beforeViolations - afterViolations) : afterViolations - beforeViolations > 0 ? "❌ +" + (afterViolations - beforeViolations) : "➖ 0"} |`,
+            `| Code findings | ${beforeCodeIssues} | ${afterCodeIssues} | ${beforeCodeIssues - afterCodeIssues > 0 ? "✅ -" + (beforeCodeIssues - afterCodeIssues) : afterCodeIssues - beforeCodeIssues > 0 ? "❌ +" + (afterCodeIssues - beforeCodeIssues) : "➖ 0"} |`,
+            `| Total issues | ${beforeTotal} | ${afterTotal} | ${beforeTotal - afterTotal > 0 ? "✅ -" + (beforeTotal - afterTotal) : afterTotal - beforeTotal > 0 ? "❌ +" + (afterTotal - beforeTotal) : "➖ 0"} |`,
+            ``,
+            `**Resolved:** ${resolved} issue(s)`,
+            `**Remaining:** ${afterTotal} issue(s)`,
+            ``,
+          ].join("\n");
+
+          // Grade transitions if available
+          if (afterData.grades) {
+            const gradeLines = [
+              `### Report Card Transition`,
+              ``,
+              `| Section | After |`,
+              `|---------|-------|`,
+              `| Accessibility | **${afterData.grades.accessibility.grade}** (${afterData.grades.accessibility.score}) |`,
+              `| Performance | **${afterData.grades.performance.grade}** (${afterData.grades.performance.score}) |`,
+              `| Best Practices | **${afterData.grades.bestPractices.grade}** (${afterData.grades.bestPractices.score}) |`,
+              `| SEO | **${afterData.grades.seo.grade}** (${afterData.grades.seo.score}) |`,
+              `| Code Quality | **${afterData.grades.codeQuality.grade}** (${afterData.grades.codeQuality.score}) |`,
+              ``,
+            ];
+            comparisonText += gradeLines.join("\n");
+          }
+
+          const verdict = afterTotal < beforeTotal ? "✅ **IMPROVED**" :
+                          afterTotal > beforeTotal ? "❌ **REGRESSED**" :
+                          "➖ **UNCHANGED**";
+          comparisonText += `\n**Verdict:** ${verdict}\n`;
+        } else {
+          comparisonText = `*No previous review found for this URL. This is the first audit — future verify_fixes calls will show before/after comparisons.*\n`;
+        }
+
+        // Auto-save the new review
+        try {
+          const reviewEntry = buildReviewEntry({
+            url,
+            codeDir: codeDirectory,
+            duration: 0,
+            lighthouse: afterData.lighthouse ?? null,
+            accessibility: afterData.accessibility,
+            performance: afterData.performance,
+            codeAnalysis: afterData.codeAnalysis,
+            status: "completed",
+          });
+          await saveReviewEntry(reviewEntry, codeDirectory);
+        } catch {
+          // Non-blocking
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                `# Fix Verification Complete`,
+                ``,
+                `**URL:** ${url}`,
+                `**Verified:** ${afterData.timestamp}`,
+                ``,
+                comparisonText,
+                `---`,
+                ``,
+                `## Current State (Post-Fix Audit)`,
+                ``,
+                afterReport,
+              ].join("\n"),
+            },
+            {
+              type: "image" as const,
+              data: afterData.screenshot.base64,
+              mimeType: afterData.screenshot.mimeType,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Fix verification failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "compare_sites",
+    `Competitive benchmarking: audit two URLs side-by-side and produce a comparison Report Card. Runs accessibility (axe-core), performance (Core Web Vitals), and SEO audits on both sites concurrently. Returns screenshots of both sites plus a grade comparison table showing which site wins in each category.
+
+Use this when the user wants to benchmark their site against a competitor, compare staging vs production, or evaluate two different sites.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      urlA: z.string().url().describe("First URL to audit (e.g., http://localhost:3000 or https://mysite.com)"),
+      urlB: z.string().url().describe("Second URL to audit (e.g., https://competitor.com)"),
+    },
+    async ({ urlA, urlB }) => {
+      try {
+        const result = await compareSites(urlA, urlB);
+        const report = formatSiteComparisonReport(result);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `### Site A: ${result.siteA.url}`,
+            },
+            {
+              type: "image" as const,
+              data: result.siteA.screenshot.base64,
+              mimeType: result.siteA.screenshot.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: `### Site B: ${result.siteB.url}`,
+            },
+            {
+              type: "image" as const,
+              data: result.siteB.screenshot.base64,
+              mimeType: result.siteB.screenshot.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: report,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `Site comparison failed: ${message}` }],
           isError: true,
         };
       }

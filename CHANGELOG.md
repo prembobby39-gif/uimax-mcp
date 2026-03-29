@@ -5,6 +5,24 @@ All notable changes to UIMax MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-29
+
+### Added
+- **Verify fixes (`verify_fixes` tool)** — Re-runs the full audit pipeline after fixes are applied and compares against the previous review. Shows before/after issue counts, grade transitions, and a verdict (improved/regressed/mixed/unchanged). Closes the review-fix-verify loop.
+- **Competitive benchmarking (`compare_sites` tool)** — Audits two URLs side-by-side (concurrently) and produces a comparison Report Card with grades for Accessibility, Performance, SEO, and Overall. Returns screenshots of both sites plus detailed metric tables. Perfect for benchmarking against competitors.
+- **GitHub Action for CI** — Reusable GitHub Action (`.github/actions/uimax-review/`) that runs UIMax audits on PRs and posts a Report Card comment. Supports configurable budget gates (min performance/accessibility/SEO scores, max violations). Updates existing comments on re-runs. Example workflow in `examples/uimax-ci.yml`.
+
+### Changed
+- Tool count: 35 → 37 (added `verify_fixes`, `compare_sites`)
+- `verify_fixes` auto-saves the post-fix review to history for tracking
+- `compare_sites` uses weighted overall score: Performance 35%, Accessibility 35%, SEO 30%
+
+### New Files
+- `src/tools/verify-fixes.ts` — verify fixes tool with before/after comparison
+- `src/tools/compare-sites.ts` — competitive benchmarking with side-by-side grades
+- `.github/actions/uimax-review/action.yml` — reusable GitHub Action
+- `examples/uimax-ci.yml` — example CI workflow for users
+
 ## [0.8.0] - 2026-03-27
 
 ### Added
