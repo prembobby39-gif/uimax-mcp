@@ -4,6 +4,7 @@ import type {
   CodeFinding,
   Severity,
   PerformanceMetrics,
+  SectionGradeReport,
 } from "../types.js";
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -421,12 +422,102 @@ function generateStyles(): string {
       border: 1px solid #1e293b;
     }
 
+    /* ── Grade Cards ────────────────────────── */
+    .grade-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .grade-card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .grade-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+    }
+
+    .grade-letter {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .grade-score {
+      font-size: 14px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .grade-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .grade-section-name {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+
+    /* ── SEO Section ───────────────────────── */
+    .seo-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .seo-check:last-child {
+      border-bottom: none;
+    }
+
+    .seo-check-icon {
+      font-size: 16px;
+      min-width: 24px;
+      text-align: center;
+      margin-top: 2px;
+    }
+
+    .seo-check-content {
+      flex: 1;
+    }
+
+    .seo-check-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #e2e8f0;
+    }
+
+    .seo-check-detail {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
     /* ── Responsive ─────────────────────────── */
     @media (max-width: 768px) {
       .container { padding: 24px 16px; }
       .header-meta { flex-direction: column; gap: 8px; }
       .summary-grid { grid-template-columns: repeat(2, 1fr); }
       .metrics-grid { grid-template-columns: 1fr; }
+      .grade-grid { grid-template-columns: repeat(2, 1fr); }
     }
   `;
 }
@@ -732,6 +823,93 @@ function buildCodeAnalysisSection(data: FullReviewResult): string {
   `;
 }
 
+function buildGradeCards(data: FullReviewResult): string {
+  if (!data.grades) return "";
+
+  const sections: readonly {
+    readonly name: string;
+    readonly key: keyof SectionGradeReport;
+  }[] = [
+    { name: "Accessibility", key: "accessibility" },
+    { name: "Performance", key: "performance" },
+    { name: "Best Practices", key: "bestPractices" },
+    { name: "SEO", key: "seo" },
+    { name: "Code Quality", key: "codeQuality" },
+  ];
+
+  const cards = sections
+    .map((section) => {
+      const grade = data.grades![section.key];
+      return `
+        <div class="grade-card" style="border-top: 3px solid ${grade.color};">
+          <div class="grade-letter" style="color: ${grade.color};">${escapeHtml(grade.grade)}</div>
+          <div class="grade-score">${grade.score}/100</div>
+          <div class="grade-label" style="color: ${grade.color};">${escapeHtml(grade.label)}</div>
+          <div class="grade-section-name">${escapeHtml(section.name)}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="section">
+      <h2 class="section-title">
+        <span class="section-title-icon">&#127942;</span>
+        Report Card
+      </h2>
+      <div class="grade-grid">
+        ${cards}
+      </div>
+    </div>
+  `;
+}
+
+function buildSeoSection(data: FullReviewResult): string {
+  if (!data.seo) return "";
+
+  const { checks, passed, failed, score } = data.seo;
+
+  const checksHtml = checks
+    .map((check) => {
+      const icon = check.passed ? "&#9989;" : "&#10060;";
+      const detail = check.value
+        ? `<div class="seo-check-detail">${escapeHtml(check.value)}</div>`
+        : "";
+      const recommendation = !check.passed
+        ? `<div class="seo-check-detail" style="color: #f59e0b;">${escapeHtml(check.recommendation)}</div>`
+        : "";
+
+      return `
+        <div class="seo-check">
+          <span class="seo-check-icon">${icon}</span>
+          <div class="seo-check-content">
+            <div class="seo-check-title">${escapeHtml(check.title)}</div>
+            ${detail}
+            ${recommendation}
+          </div>
+          <span class="badge badge-${check.impact}">${check.impact}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="section">
+      <h2 class="section-title">
+        <span class="section-title-icon">&#128270;</span>
+        SEO
+      </h2>
+      <div style="margin-bottom: 16px; color: #94a3b8; font-size: 14px;">
+        Score: <strong style="color: #e2e8f0;">${score}/100</strong>
+        &middot; ${passed} passed &middot; ${failed} failed
+      </div>
+      <div style="background: #111827; border: 1px solid #1e293b; border-radius: 10px; overflow: hidden;">
+        ${checksHtml}
+      </div>
+    </div>
+  `;
+}
+
 function buildSeveritySummary(data: FullReviewResult): string {
   const codeCounts = countBySeverity(data.codeAnalysis.findings);
 
@@ -817,10 +995,12 @@ export function generateHtmlReport(data: FullReviewResult): string {
 <body>
   <div class="container">
     ${buildHeader(data)}
+    ${buildGradeCards(data)}
     ${buildSummaryCards(data)}
     ${buildScreenshotSection(data)}
     ${buildAccessibilitySection(data)}
     ${buildPerformanceSection(data.performance)}
+    ${buildSeoSection(data)}
     ${buildCodeAnalysisSection(data)}
     ${buildSeveritySummary(data)}
     ${buildFooter()}

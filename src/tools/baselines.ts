@@ -6,6 +6,7 @@ import type {
   BaselineComparison,
   BaselineMetricChange,
 } from "../types.js";
+import { scoreToGrade, formatGradeTransition } from "../utils/grading.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -235,10 +236,20 @@ function formatMetricLine(change: BaselineMetricChange): string {
 
 /**
  * Format a baseline comparison as readable markdown.
+ * Now includes letter grade transitions for score-based metrics.
  */
 export function formatBaselineComparison(
   comparison: BaselineComparison
 ): string {
+  const allChanges = [
+    ...comparison.improvements,
+    ...comparison.regressions,
+    ...comparison.unchanged,
+  ];
+
+  // Build grade transition summary for score-based metrics
+  const gradeTransitions = buildGradeTransitions(allChanges);
+
   const sections: string[] = [
     `## Baseline Comparison`,
     ``,
@@ -248,35 +259,106 @@ export function formatBaselineComparison(
     ``,
   ];
 
+  // Add grade transition summary if available
+  if (gradeTransitions.length > 0) {
+    sections.push(`### Grade Changes`);
+    sections.push(``);
+    for (const transition of gradeTransitions) {
+      sections.push(`- **${transition.metric}:** ${transition.display}`);
+    }
+    sections.push(``);
+  }
+
   if (comparison.improvements.length > 0) {
     sections.push(`### Improvements`);
-    sections.push(`| Metric | Previous | Current | Delta |`);
-    sections.push(`|--------|----------|---------|-------|`);
+    sections.push(`| Metric | Previous | Current | Delta | Grade |`);
+    sections.push(`|--------|----------|---------|-------|-------|`);
     for (const change of comparison.improvements) {
-      sections.push(formatMetricLine(change));
+      sections.push(formatMetricLineWithGrade(change));
     }
     sections.push(``);
   }
 
   if (comparison.regressions.length > 0) {
     sections.push(`### Regressions`);
-    sections.push(`| Metric | Previous | Current | Delta |`);
-    sections.push(`|--------|----------|---------|-------|`);
+    sections.push(`| Metric | Previous | Current | Delta | Grade |`);
+    sections.push(`|--------|----------|---------|-------|-------|`);
     for (const change of comparison.regressions) {
-      sections.push(formatMetricLine(change));
+      sections.push(formatMetricLineWithGrade(change));
     }
     sections.push(``);
   }
 
   if (comparison.unchanged.length > 0) {
     sections.push(`### Unchanged`);
-    sections.push(`| Metric | Previous | Current | Delta |`);
-    sections.push(`|--------|----------|---------|-------|`);
+    sections.push(`| Metric | Previous | Current | Delta | Grade |`);
+    sections.push(`|--------|----------|---------|-------|-------|`);
     for (const change of comparison.unchanged) {
-      sections.push(formatMetricLine(change));
+      sections.push(formatMetricLineWithGrade(change));
     }
     sections.push(``);
   }
 
   return sections.join("\n");
+}
+
+interface GradeTransitionDisplay {
+  readonly metric: string;
+  readonly display: string;
+}
+
+/**
+ * Build grade transition strings for score-based metrics.
+ * Only includes metrics where the grade actually changed.
+ */
+function buildGradeTransitions(
+  changes: readonly BaselineMetricChange[]
+): readonly GradeTransitionDisplay[] {
+  const scoreMetrics = new Set([
+    "Lighthouse Performance",
+    "Lighthouse Accessibility",
+    "Lighthouse Best Practices",
+    "Lighthouse SEO",
+  ]);
+
+  const transitions: GradeTransitionDisplay[] = [];
+
+  for (const change of changes) {
+    if (!scoreMetrics.has(change.metric)) continue;
+    if (change.previous === null || change.current === null) continue;
+
+    const prevGrade = scoreToGrade(change.previous);
+    const currGrade = scoreToGrade(change.current);
+
+    if (prevGrade.grade !== currGrade.grade) {
+      transitions.push({
+        metric: change.metric.replace("Lighthouse ", ""),
+        display: formatGradeTransition(prevGrade, currGrade),
+      });
+    }
+  }
+
+  return transitions;
+}
+
+/**
+ * Format a metric line with an appended grade column for score-based metrics.
+ */
+function formatMetricLineWithGrade(change: BaselineMetricChange): string {
+  const prev = change.previous !== null ? String(change.previous) : "N/A";
+  const curr = change.current !== null ? String(change.current) : "N/A";
+  const deltaStr =
+    change.delta !== null
+      ? change.delta > 0
+        ? `+${change.delta}`
+        : String(change.delta)
+      : "N/A";
+
+  // Add grade for score-based metrics (Lighthouse scores are 0-100)
+  const isScoreMetric = change.metric.startsWith("Lighthouse");
+  const gradeStr = isScoreMetric && change.current !== null
+    ? scoreToGrade(change.current).grade
+    : "-";
+
+  return `| ${change.metric} | ${prev} | ${curr} | ${deltaStr} | ${gradeStr} |`;
 }

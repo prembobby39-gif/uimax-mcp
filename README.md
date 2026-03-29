@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/npm/v/uimax-mcp" alt="npm version" />
   <img src="https://img.shields.io/npm/dm/uimax-mcp" alt="npm downloads" />
   <img src="https://img.shields.io/npm/l/uimax-mcp" alt="license" />
-  <img src="https://img.shields.io/badge/tools-34-blue" alt="34 tools" />
+  <img src="https://img.shields.io/badge/tools-35-blue" alt="35 tools" />
   <img src="https://img.shields.io/badge/tests-463%20passing-brightgreen" alt="463 tests passing" />
   <img src="https://img.shields.io/badge/cost-free%20(Pro%20plan)-brightgreen" alt="free for Pro plan" />
 </p>
@@ -17,10 +17,12 @@ One command — *"review my UI at localhost:3000"* — and it:
 2. **Audits accessibility** — runs axe-core for WCAG 2.1 violations
 3. **Runs Lighthouse** — real Google Lighthouse scores (Performance, Accessibility, Best Practices, SEO)
 4. **Measures performance** — captures Core Web Vitals (FCP, LCP, CLS, TBT)
-5. **Scans your code** — AST-based analysis for 25+ anti-patterns across accessibility, design, and code quality
-6. **Generates an expert review** — Claude acts as a senior frontend engineer with a baked-in review methodology
-7. **Implements the fixes** — edits your actual code files, starting from critical issues down
-8. **Tracks everything** — auto-saves review history so you can see progress over time
+5. **Audits SEO** — 18 checks: meta tags, Open Graph, Twitter cards, structured data, heading hierarchy, canonical URLs
+6. **Scans your code** — AST-based analysis for 25+ anti-patterns across accessibility, design, and code quality
+7. **Grades everything** — per-section Report Card with letter grades (A+ through F) for Accessibility, Performance, Best Practices, SEO, and Code Quality
+8. **Generates an expert review** — Claude acts as a senior frontend engineer with a baked-in review methodology
+9. **Implements the fixes** — edits your actual code files, starting from critical issues down
+10. **Tracks everything** — auto-saves review history so you can see progress over time
 
 **Works on any URL** — localhost, staging, production. Any site your machine can reach.
 
@@ -51,11 +53,13 @@ Claude Code calls review_ui ->
   2. Runs axe-core accessibility audit
   3. Runs Google Lighthouse (Performance, A11y, Best Practices, SEO)
   4. Measures Core Web Vitals
-  5. Scans source code with AST-based analysis
-  6. Returns screenshot + all data + expert review methodology
-  7. Claude Code generates expert review (using YOUR Pro plan -- $0 extra)
-  8. Claude Code implements every fix automatically
-  9. Review saved to .uimax-reviews.json for tracking
+  5. Runs dedicated SEO audit (18 checks)
+  6. Scans source code with AST-based analysis
+  7. Generates per-section Report Card (A+ through F letter grades)
+  8. Returns screenshot + all data + expert review methodology
+  9. Claude Code generates expert review (using YOUR Pro plan -- $0 extra)
+  10. Claude Code implements every fix automatically
+  11. Review saved to .uimax-reviews.json for tracking
 ```
 
 ### Install Globally
@@ -66,15 +70,15 @@ npm install -g uimax-mcp
 
 ---
 
-## Tools (34)
+## Tools (35)
 
 ### Review Pipeline
 
 | Tool | Description |
 |------|-------------|
-| `review_ui` | **The main tool.** Full automated pipeline: screenshot + Lighthouse + axe-core + performance + code analysis + expert review methodology. Auto-saves to review history. |
+| `review_ui` | **The main tool.** Full automated pipeline: screenshot + Lighthouse + axe-core + performance + SEO + code analysis + Report Card (A+-F letter grades) + expert review methodology. Auto-saves to review history. |
 | `quick_review` | Fast design-only review. Screenshot + focused design methodology. No code analysis or performance audit. |
-| `export_report` | Generate a standalone HTML report with everything embedded. Dark themed, zero dependencies. Share with your team. |
+| `export_report` | Generate a standalone HTML report with everything embedded. Now includes Report Card grade cards and SEO section. Dark themed, zero dependencies. Share with your team. |
 
 ### Screenshots & Visual
 
@@ -86,11 +90,12 @@ npm install -g uimax-mcp
 | `compare_screenshots` | Pixel-level diff using `pixelmatch`. Returns both screenshots + red-highlighted diff image + exact pixel difference %. |
 | `semantic_compare` | **AI-powered visual comparison.** Captures before/after + pixel diff, returns structured methodology for Claude to evaluate whether changes match the intended design request. |
 
-### Lighthouse & Performance
+### Lighthouse, Performance & SEO
 
 | Tool | Description |
 |------|-------------|
 | `lighthouse_audit` | Full Google Lighthouse audit — Performance, Accessibility, Best Practices, SEO scores + failing audits. |
+| `seo_audit` | **New in v0.8.0.** Dedicated SEO audit checking 18 signals: meta title/description, heading hierarchy, Open Graph, Twitter cards, structured data (JSON-LD), canonical URLs, image alt text, viewport meta, lang attribute, and more. Weighted scoring by impact. |
 | `pwa_audit` | PWA readiness: installable, service worker, HTTPS, manifest, offline capability. |
 | `security_audit` | Security analysis: HTTPS, CSP, mixed content, vulnerable JS libraries, external links without `noopener`. |
 | `unused_code` | Find unused JavaScript and CSS with exact byte savings per resource. |
@@ -136,18 +141,46 @@ npm install -g uimax-mcp
 | Tool | Description |
 |------|-------------|
 | `save_baseline` | Save current audit state to `.uimax-history.json`. Track scores over time. |
-| `compare_to_baseline` | Compare current state vs previous baseline. Shows improvements and regressions. |
+| `compare_to_baseline` | Compare current state vs previous baseline. Shows improvements and regressions with letter grade transitions (e.g., "D -> B+ (+22)"). |
 | `check_budgets` | Enforce performance budgets from `.uimaxrc.json`. Pass/fail for Lighthouse scores, Web Vitals, violation counts. |
 
 ### Review History
 
 | Tool | Description |
 |------|-------------|
-| `get_review_history` | View past UIMax reviews for this project. Filter by URL, limit count. |
-| `get_review_stats` | Aggregate statistics: total reviews, score trends, most common issues, most problematic files. |
-| `review_diff` | Compare two specific reviews — new issues, resolved issues, score changes with improved/regressed indicators. |
+| `get_review_history` | View past UIMax reviews for this project. Filter by URL, limit count. Now includes letter grades alongside scores. |
+| `get_review_stats` | Aggregate statistics: total reviews, score trends, most common issues, most problematic files. Includes Code Quality grades. |
+| `review_diff` | Compare two specific reviews — new issues, resolved issues, score changes with letter grade transitions. |
 
 > **Every review is auto-saved.** When you run `review_ui`, the results are automatically persisted to `.uimax-reviews.json`. No manual save needed — just ask "show me my review history" anytime.
+
+---
+
+## Report Card (A+ through F)
+
+Every `review_ui` run now generates a **per-section Report Card** with letter grades on a 13-tier scale:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    REPORT CARD                       │
+├──────────────────┬──────────┬───────┬───────────────┤
+│ Section          │ Score    │ Grade │ Rating        │
+├──────────────────┼──────────┼───────┼───────────────┤
+│ Accessibility    │ 95       │ A     │ Excellent     │
+│ Performance      │ 72       │ C-    │ Below Average │
+│ Best Practices   │ 88       │ B+    │ Very Good     │
+│ SEO              │ 61       │ D-    │ Very Weak     │
+│ Code Quality     │ 83       │ B     │ Good          │
+└──────────────────┴──────────┴───────┴───────────────┘
+```
+
+Grades appear in:
+- **`review_ui` output** — Report Card table at the top of every review
+- **`export_report` HTML** — color-coded grade cards (green A -> red F)
+- **`compare_to_baseline`** — grade transitions showing improvement (e.g., `D -> B+ (+22)`)
+- **`get_review_history` / `get_review_stats` / `review_diff`** — grades alongside numeric scores for quick scanning
+
+The grading scale: `A+` (97+) > `A` (93+) > `A-` (90+) > `B+` (87+) > `B` (83+) > `B-` (80+) > `C+` (77+) > `C` (73+) > `C-` (70+) > `D+` (67+) > `D` (63+) > `D-` (60+) > `F` (<60)
 
 ---
 
@@ -297,6 +330,16 @@ Claude: [Calls lcp_optimization]
         [Specific optimization suggestions]
 ```
 
+### SEO Audit
+```
+You: Run an SEO audit on https://myapp.com
+
+Claude: [Calls seo_audit]
+        [Checks 18 SEO signals: meta tags, Open Graph, structured data, etc.]
+        [Returns score, passing checks, and failed checks with fix recommendations]
+        [Weighted by impact: critical > high > medium > low]
+```
+
 ### Debug Page Load Issues
 ```
 You: What console errors does localhost:3000 produce?
@@ -369,8 +412,10 @@ When using the full `review_ui` pipeline, Claude evaluates:
 | **User Experience** | Navigation, interaction states, loading/error/empty states, edge cases |
 | **Accessibility** | WCAG 2.1 AA, keyboard nav, screen reader compat, focus management |
 | **Performance** | Lighthouse scores, Core Web Vitals, render-blocking resources, bundle size |
+| **SEO** | Meta tags, Open Graph, Twitter cards, structured data, heading hierarchy, canonical URLs, image alt text |
 | **Code Quality** | Component architecture, CSS organization, error boundaries, TypeScript safety |
 | **Security** | HTTPS, CSP, vulnerable libraries, mixed content |
+| **Report Card** | Per-section letter grades (A+ through F) for Accessibility, Performance, Best Practices, SEO, Code Quality |
 | **Creative** | Modern UI patterns (Linear, Vercel, Raycast), micro-interactions, animations |
 
 ---
@@ -442,14 +487,16 @@ Auto-detected from `package.json`:
 |           |                                                           |
 |           v                                                           |
 |  +----------------------------------------------------------------+  |
-|  |                UIMax MCP (34 tools)                             |  |
+|  |                UIMax MCP (35 tools)                             |  |
 |  |                                                                 |  |
 |  |  Screenshot -------> Puppeteer ----------> PNG Image            |  |
 |  |  Accessibility ----> axe-core ------------> WCAG Violations     |  |
 |  |  Lighthouse -------> Google LH ----------> Scores + Audits     |  |
 |  |  Deep LH ----------> PWA/Security/LCP --> Granular Analysis    |  |
+|  |  SEO Audit --------> 18 checks ----------> SEO Score           |  |
 |  |  Performance ------> Perf API ----------> Web Vitals           |  |
 |  |  Code Scan --------> TypeScript AST -----> Anti-patterns       |  |
+|  |  Report Card ------> Grading Engine -----> A+ to F Grades      |  |
 |  |  Browser ----------> Click/Type/Scroll --> Interaction          |  |
 |  |  Debugging --------> Console/Network ----> Runtime Data        |  |
 |  |  History ----------> .uimax-reviews.json > Progress Tracking   |  |
@@ -510,9 +557,12 @@ Contributions welcome! Some ideas:
 - [x] Deep Lighthouse analysis (PWA, security, unused code, LCP, resources)
 - [x] AI-powered semantic visual comparison
 - [x] Review history tracking with auto-save
+- [x] Dedicated SEO audit (18 checks, weighted scoring)
+- [x] Per-section letter grades (A+ through F Report Card)
 - [ ] Custom rule plugins (user-defined regex rules)
 - [ ] Figma design comparison (screenshot vs Figma mock)
 - [ ] Cross-browser testing (Firefox, WebKit via Playwright)
+- [ ] CI/CD integration (GitHub Action for automated review on PR)
 
 ---
 

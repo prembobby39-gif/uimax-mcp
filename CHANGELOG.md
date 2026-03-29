@@ -5,6 +5,30 @@ All notable changes to UIMax MCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-27
+
+### Added
+- **Per-section letter grades (A+ through F)** — every review now includes a Report Card grading Accessibility, Performance, Best Practices, SEO, and Code Quality on a 13-tier scale (A+ to F) with color-coded output
+- **Dedicated SEO audit** — new `seo_audit` tool checks 18 SEO signals: meta title/description, heading hierarchy, Open Graph tags, Twitter cards, structured data (JSON-LD), canonical URLs, image alt text, viewport meta, lang attribute, and more
+- **SEO integrated into full review** — `review_ui` now runs the SEO audit as part of its pipeline and includes results in the report
+- **Grade cards in HTML reports** — `export_report` now renders a visual Report Card section with color-coded grade cards (green A -> red F) at the top of the HTML report
+- **SEO section in HTML reports** — `export_report` now includes a dedicated SEO section with pass/fail checks and recommendations
+- **Grade transitions in baseline comparisons** — `compare_to_baseline` now shows grade changes ("Performance: D -> B+ (+22)") alongside raw score deltas
+- **Grade-enhanced review history** — `get_review_history`, `get_review_stats`, and `review_diff` now display letter grades alongside scores for scannable output
+- **Distribution plan** — comprehensive go-to-market strategy covering MCP directories, community channels, content marketing, and agency positioning
+
+### Changed
+- Tool count: 34 -> 35 (added `seo_audit`)
+- `review_ui` output now includes Report Card table and SEO score summary
+- Baseline comparison tables now include a Grade column for Lighthouse metrics
+- Review history tables now include a Code Quality grade column
+- Review diff output now includes a Grade Changes section showing transitions
+
+### New Files
+- `src/utils/grading.ts` — score-to-grade mapping utility (A+ through F, 13-tier scale)
+- `src/tools/seo.ts` — dedicated SEO audit tool with 18 checks
+- `docs/distribution-plan.md` — go-to-market strategy and content calendar
+
 ## [0.7.0] - 2026-03-26
 
 ### Added

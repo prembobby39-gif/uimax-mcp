@@ -11,3 +11,4 @@ coverage/
 .uimax-history.json
 .uimax-reviews.json
 .mcpregistry_*
+.autopilot/

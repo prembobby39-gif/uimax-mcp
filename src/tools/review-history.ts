@@ -11,6 +11,7 @@ import type {
   ReviewDiff,
   ReviewTrend,
 } from "../types.js";
+import { scoreToGrade, formatGradeTransition } from "../utils/grading.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -358,20 +359,21 @@ export function formatReviewHistory(
   const header = [
     "## Review History",
     "",
-    "| Date | URL | Perf | A11y | BP | SEO | Issues | Status |",
-    "|------|-----|------|------|----|-----|--------|--------|",
+    "| Date | URL | Perf | A11y | BP | SEO | Code | Issues | Status |",
+    "|------|-----|------|------|----|-----|------|--------|--------|",
   ];
 
   const rows = entries.map((e) => {
     const date = new Date(e.timestamp).toLocaleDateString();
     const shortUrl = truncateUrl(e.url, 30);
-    const perf = formatScore(e.scores.lighthouse.performance);
-    const a11y = formatScore(e.scores.lighthouse.accessibility);
-    const bp = formatScore(e.scores.lighthouse.bestPractices);
-    const seo = formatScore(e.scores.lighthouse.seo);
+    const perf = formatScoreWithGrade(e.scores.lighthouse.performance);
+    const a11y = formatScoreWithGrade(e.scores.lighthouse.accessibility);
+    const bp = formatScoreWithGrade(e.scores.lighthouse.bestPractices);
+    const seo = formatScoreWithGrade(e.scores.lighthouse.seo);
+    const code = formatCodeGrade(e.scores.codeIssues);
     const issues = String(e.findings.total);
     const status = e.status;
-    return `| ${date} | ${shortUrl} | ${perf} | ${a11y} | ${bp} | ${seo} | ${issues} | ${status} |`;
+    return `| ${date} | ${shortUrl} | ${perf} | ${a11y} | ${bp} | ${seo} | ${code} | ${issues} | ${status} |`;
   });
 
   return [...header, ...rows].join("\n");
@@ -384,6 +386,38 @@ function truncateUrl(url: string, maxLen: number): string {
 
 function formatScore(score: number | null): string {
   return score !== null ? String(score) : "N/A";
+}
+
+/**
+ * Format a score with its letter grade: "B+ (87)"
+ */
+function formatScoreWithGrade(score: number | null): string {
+  if (score === null) return "N/A";
+  const grade = scoreToGrade(score);
+  return `${grade.grade} (${score})`;
+}
+
+/**
+ * Format a code quality grade from issue counts.
+ */
+function formatCodeGrade(codeIssues: {
+  readonly total: number;
+  readonly bySeverity: {
+    readonly critical: number;
+    readonly high: number;
+    readonly medium: number;
+    readonly low: number;
+  };
+}): string {
+  // Simple heuristic: start at 100, penalize by severity
+  const penalty =
+    codeIssues.bySeverity.critical * 10 +
+    codeIssues.bySeverity.high * 5 +
+    codeIssues.bySeverity.medium * 2 +
+    codeIssues.bySeverity.low * 1;
+  const score = Math.max(0, 100 - penalty);
+  const grade = scoreToGrade(score);
+  return grade.grade;
 }
 
 /**
@@ -414,13 +448,16 @@ export function formatReviewStats(stats: ReviewStats): string {
   if (stats.scoreTrends.length > 0) {
     sections.push("### Score Trends (First vs Latest)");
     sections.push("");
-    sections.push("| Metric | First | Latest | Trend |");
-    sections.push("|--------|-------|--------|-------|");
+    sections.push("| Metric | First | Latest | Grade | Trend |");
+    sections.push("|--------|-------|--------|-------|-------|");
     for (const trend of stats.scoreTrends) {
       const first = formatScore(trend.first);
       const latest = formatScore(trend.latest);
+      const grade = trend.metric.startsWith("Lighthouse") && trend.latest !== null
+        ? scoreToGrade(trend.latest).grade
+        : "-";
       const icon = trendIcon(trend.direction);
-      sections.push(`| ${trend.metric} | ${first} | ${latest} | ${icon} |`);
+      sections.push(`| ${trend.metric} | ${first} | ${latest} | ${grade} | ${icon} |`);
     }
     sections.push("");
   }
@@ -468,21 +505,47 @@ export function formatReviewDiff(diff: ReviewDiff): string {
     "",
   ];
 
+  // Build grade transition summary for score-based metrics
+  const gradeChanges = diff.scoreChanges
+    .filter((c) => c.metric.startsWith("Lighthouse") && c.previous !== null && c.current !== null)
+    .map((c) => {
+      const prevGrade = scoreToGrade(c.previous!);
+      const currGrade = scoreToGrade(c.current!);
+      return {
+        metric: c.metric.replace("Lighthouse ", ""),
+        changed: prevGrade.grade !== currGrade.grade,
+        display: formatGradeTransition(prevGrade, currGrade),
+      };
+    })
+    .filter((g) => g.changed);
+
+  if (gradeChanges.length > 0) {
+    sections.push("### Grade Changes");
+    sections.push("");
+    for (const gc of gradeChanges) {
+      sections.push(`- **${gc.metric}:** ${gc.display}`);
+    }
+    sections.push("");
+  }
+
   if (diff.scoreChanges.length > 0) {
     sections.push("### Score Changes");
     sections.push("");
-    sections.push("| Metric | Before | After | Delta | Status |");
-    sections.push("|--------|--------|-------|-------|--------|");
+    sections.push("| Metric | Before | After | Delta | Grade | Status |");
+    sections.push("|--------|--------|-------|-------|-------|--------|");
     for (const change of diff.scoreChanges) {
       const prev = formatScore(change.previous);
       const curr = formatScore(change.current);
       const delta = change.delta !== null
         ? (change.delta > 0 ? `+${change.delta}` : String(change.delta))
         : "N/A";
+      const grade = change.metric.startsWith("Lighthouse") && change.current !== null
+        ? scoreToGrade(change.current).grade
+        : "-";
       const icon = change.direction === "improved" ? "improved"
         : change.direction === "regressed" ? "regressed"
         : "unchanged";
-      sections.push(`| ${change.metric} | ${prev} | ${curr} | ${delta} | ${icon} |`);
+      sections.push(`| ${change.metric} | ${prev} | ${curr} | ${delta} | ${grade} | ${icon} |`);
     }
     sections.push("");
   }

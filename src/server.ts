@@ -24,8 +24,10 @@ import {
   loadBudgetsFromConfig,
   formatBudgetReport,
 } from "./tools/budgets.js";
+import { runSeoAudit, formatSeoReport } from "./tools/seo.js";
 import { closeBrowser } from "./utils/browser.js";
 import type { BaselineData } from "./types.js";
+import { formatGradeCompact } from "./utils/grading.js";
 import {
   UI_REVIEW_PROMPT,
   RESPONSIVE_REVIEW_PROMPT,
@@ -126,7 +128,7 @@ async function runLighthouseSafe(
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "uimax",
-    version: "0.7.0",
+    version: "0.8.0",
     // 0.2.0: Dark mode detection, 25+ code rules, framework detection fix
   });
 
@@ -204,6 +206,20 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
                 `**Code files analyzed:** ${auditData.codeAnalysis.totalFiles}`,
                 `**Code findings:** ${auditData.codeAnalysis.findings.length}`,
                 `**Framework detected:** ${auditData.codeAnalysis.framework}`,
+                ...(auditData.grades
+                  ? [
+                      ``,
+                      `## Report Card`,
+                      `| Section | Grade |`,
+                      `|---------|-------|`,
+                      `| Accessibility | **${auditData.grades.accessibility.grade}** (${auditData.grades.accessibility.score}) |`,
+                      `| Performance | **${auditData.grades.performance.grade}** (${auditData.grades.performance.score}) |`,
+                      `| Best Practices | **${auditData.grades.bestPractices.grade}** (${auditData.grades.bestPractices.score}) |`,
+                      `| SEO | **${auditData.grades.seo.grade}** (${auditData.grades.seo.score}) |`,
+                      `| Code Quality | **${auditData.grades.codeQuality.grade}** (${auditData.grades.codeQuality.score}) |`,
+                      ``,
+                    ]
+                  : []),
                 ...(auditData.lighthouse
                   ? [
                       `**Lighthouse Performance:** ${auditData.lighthouse.scores.performance ?? "N/A"}`,
@@ -212,6 +228,9 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
                       `**Lighthouse SEO:** ${auditData.lighthouse.scores.seo ?? "N/A"}`,
                     ]
                   : [`**Lighthouse:** skipped (timed out or unavailable)`]),
+                ...(auditData.seo
+                  ? [`**SEO Score:** ${auditData.seo.score}/100 (${auditData.seo.passed} passed, ${auditData.seo.failed} failed)`]
+                  : []),
                 ``,
                 `---`,
                 ``,
@@ -821,6 +840,40 @@ This tool is FREE — it runs entirely within Claude Code using the user's exist
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text" as const, text: `Lighthouse audit failed: ${message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "seo_audit",
+    `Run a comprehensive SEO audit. Checks 18 SEO signals including meta tags, heading hierarchy, Open Graph tags, Twitter cards, structured data (JSON-LD), canonical URLs, image alt text, and more. Returns a 0-100 score and specific recommendations for each failing check.
+
+Use this when the user wants to check their page's SEO health, improve search engine visibility, or ensure proper social sharing metadata.
+
+This tool is FREE — runs entirely within Claude Code.`,
+    {
+      url: z.string().url().describe("URL of the page to audit (e.g., http://localhost:3000)"),
+    },
+    async ({ url }) => {
+      try {
+        const result = await runSeoAudit(url);
+        const report = formatSeoReport(result);
+
+        return {
+          content: [
+            { type: "text" as const, text: report },
+            {
+              type: "text" as const,
+              text: `\n\n<raw_data>\n${JSON.stringify(result, null, 2)}\n</raw_data>`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [{ type: "text" as const, text: `SEO audit failed: ${message}` }],
           isError: true,
         };
       }

@@ -153,6 +153,51 @@ export interface CrawlResult {
   readonly pages: readonly CrawlPageResult[];
 }
 
+// ── SEO ───────────────────────────────────────────────────────────
+
+export interface SeoCheckItem {
+  readonly id: string;
+  readonly title: string;
+  readonly passed: boolean;
+  readonly value: string | null;
+  readonly recommendation: string;
+  readonly impact: "critical" | "high" | "medium" | "low";
+}
+
+export interface SeoResult {
+  readonly url: string;
+  readonly timestamp: string;
+  readonly checks: readonly SeoCheckItem[];
+  readonly passed: number;
+  readonly failed: number;
+  readonly score: number;
+  readonly summary: string;
+}
+
+// ── Letter Grades ─────────────────────────────────────────────────
+
+export type LetterGrade =
+  | "A+" | "A" | "A-"
+  | "B+" | "B" | "B-"
+  | "C+" | "C" | "C-"
+  | "D+" | "D" | "D-"
+  | "F";
+
+export interface GradeInfo {
+  readonly grade: LetterGrade;
+  readonly score: number;
+  readonly label: string;
+  readonly color: string;
+}
+
+export interface SectionGradeReport {
+  readonly accessibility: GradeInfo;
+  readonly performance: GradeInfo;
+  readonly bestPractices: GradeInfo;
+  readonly seo: GradeInfo;
+  readonly codeQuality: GradeInfo;
+}
+
 // ── Full Review ────────────────────────────────────────────────────
 
 export interface FullReviewResult {
@@ -164,6 +209,8 @@ export interface FullReviewResult {
   readonly performance: PerformanceMetrics;
   readonly codeAnalysis: CodeAnalysisResult;
   readonly lighthouse?: LighthouseResultSummary;
+  readonly seo?: SeoResult;
+  readonly grades?: SectionGradeReport;
 }
 
 // ── Baselines ─────────────────────────────────────────────────────
